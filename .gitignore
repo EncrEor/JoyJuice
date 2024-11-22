@@ -1,0 +1,8 @@
+node_modules
+# Ignorer les répertoires
+tests/
+coverage/
+ARCHIVES avant GPT/
+
+# Ignorer des fichiers spécifiques
+.env
