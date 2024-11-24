@@ -129,7 +129,8 @@ router.post('/', async (req, res) => {
       req.body.Adresse || '',
       req.body.Zone || '',
       req.body.Delais || '',
-      req.body.Congelateur || ''
+      req.body.Congelateur || '',
+      parseFloat(req.body.Solde || '0').toFixed(3) // Gestion du solde avec formatage
     ];
     
     console.log('Données formatées pour le service:', clientArray);
@@ -212,7 +213,8 @@ const COLUMNS = {
   ADRESSE: 3,
   ZONE: 4,
   DELAIS: 5,
-  CONGELATEUR: 6
+  CONGELATEUR: 6,
+  SOLDE: 7
 };
 
 // Récupérer tous les clients

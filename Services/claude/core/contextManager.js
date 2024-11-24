@@ -92,33 +92,67 @@ class ContextManager {
         }
     }
 
-    /**
-     * Met à jour le contexte de conversation d'un utilisateur
-     * @param {string} userId - Identifiant unique de l'utilisateur
-     * @param {Object} updates - Modifications à apporter au contexte
-     * @returns {Object} Contexte mis à jour
-     */
-    async updateConversationContext(userId, updates) {
-        try {
-            const currentContext = await this.getConversationContext(userId);
-            const updatedContext = { 
-                ...currentContext, 
-                ...updates,
-                lastUpdate: new Date().toISOString()
-            };
-            
-            console.log('🔄 Mise à jour contexte:', {
-                userId,
-                updates: Object.keys(updates)
+/**
+ * Met à jour le contexte de conversation d'un utilisateur
+ * @param {string} userId - Identifiant unique de l'utilisateur
+ * @param {Object} updates - Modifications à apporter au contexte
+ * @returns {Object} Contexte mis à jour
+ */
+async updateConversationContext(userId, updates) {
+    try {
+        console.log('🔄 Mise à jour du contexte utilisateur:', { userId, updates });
+
+        // Étape 1 : Récupération du contexte actuel
+        const currentContext = await this.getConversationContext(userId);
+
+        // Étape 2 : Construction du nouveau contexte
+        const updatedContext = { 
+            ...currentContext,
+            ...updates,
+            lastUpdate: new Date().toISOString()
+        };
+
+        // Logs détaillés pour les changements spécifiques
+        if (updates.lastClient) {
+            console.log('👤 Mise à jour du dernier client sélectionné:', {
+                ancien: currentContext.lastClient?.Nom_Client,
+                nouveau: updates.lastClient?.Nom_Client,
+                zone: updates.lastClient?.Zone
             });
 
-            ContextManager.conversationCache.set(userId, updatedContext);
-            return updatedContext;
-        } catch (error) {
-            console.error('❌ Erreur mise à jour contexte:', error);
-            throw error;
+            // Garder un historique des derniers clients
+            updatedContext.clientHistory = [
+                ...(currentContext.clientHistory || []),
+                {
+                    id: updates.lastClient.ID_Client,
+                    nom: updates.lastClient.Nom_Client,
+                    zone: updates.lastClient.Zone,
+                    timestamp: new Date().toISOString()
+                }
+            ].slice(-5); // Limiter l'historique à 5 entrées
         }
+
+        if (updates.conversationState) {
+            console.log('💬 Mise à jour de l\'état de la conversation:', {
+                ancien: currentContext.conversationState,
+                nouveau: updates.conversationState
+            });
+
+            updatedContext.previousState = currentContext.conversationState;
+            updatedContext.conversationState = updates.conversationState;
+        }
+
+        // Sauvegarde dans le cache
+        ContextManager.conversationCache.set(userId, updatedContext);
+        console.log('✅ Contexte utilisateur mis à jour avec succès:', updatedContext);
+
+        return updatedContext;
+
+    } catch (error) {
+        console.error('❌ Erreur lors de la mise à jour du contexte:', error);
+        throw error;
     }
+}
 
     /**
      * Résout un client avec sa zone
@@ -129,42 +163,43 @@ class ContextManager {
      */
     async resolveClientWithZone(clientName, zone = null) {
         try {
-            console.log(`🔍 Résolution du client: ${clientName}${zone ? ` (zone: ${zone})` : ''}`);
-            
-            // Recherche du client via le service dédié
+            console.log(`🔍 Tentative de résolution du client: ${clientName}, Zone: ${zone || 'Non spécifiée'}`);
+    
+            // Recherche dans la base des clients
             const result = await clientLookupService.findClientByNameAndZone(clientName, zone);
-            
-            // Cas 1: Client unique trouvé
-            if (result.status === 'single_match') {
-                console.log('✅ Client unique trouvé:', result.client.Nom_Client);
-                return result.client;
+    
+            switch (result.status) {
+                case 'single_match':
+                    console.log('✅ Client unique trouvé:', result.client);
+                    return result.client;
+    
+                case 'multiple':
+                    console.log('⚠️ Ambiguïté : plusieurs clients trouvés.');
+                    return {
+                        status: 'NEED_ZONE',
+                        message: result.message,
+                        matches: result.matches,
+                        availableZones: result.zones
+                    };
+    
+                case 'not_found':
+                    console.log('❌ Aucun client trouvé pour:', clientName);
+                    return {
+                        status: 'NOT_FOUND',
+                        message: `Client "${clientName}" introuvable.`,
+                        searchedName: clientName,
+                        searchedZone: zone
+                    };
+    
+                default:
+                    console.error('❌ Statut inconnu renvoyé par le service de recherche:', result.status);
+                    throw new Error('Statut inconnu dans resolveClientWithZone');
             }
-
-            // Cas 2: Plusieurs clients possibles, besoin de préciser la zone
-            if (result.status === 'multiple_matches') {
-                console.log('⚠️ Plusieurs clients trouvés, nécessite précision zone');
-                return {
-                    status: 'NEED_ZONE',
-                    message: result.message,
-                    matches: result.matches,
-                    availableZones: result.matches.map(m => m.zone || m.Zone).filter(Boolean)
-                };
-            }
-
-            // Cas 3: Aucun client trouvé
-            console.log('❌ Client non trouvé');
-            return {
-                status: 'NOT_FOUND',
-                message: `Client "${clientName}" introuvable.`,
-                searchedName: clientName,
-                searchedZone: zone
-            };
-
         } catch (error) {
-            console.error('❌ Erreur résolution client:', error);
+            console.error('❌ Erreur lors de la résolution du client:', error);
             throw error;
         }
-    }
+    }    
 
     /**
      * Récupère des statistiques sur l'état du cache via CacheManager

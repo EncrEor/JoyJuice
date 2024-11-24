@@ -1,3 +1,5 @@
+//Services/claude/core/cacheManager/dateUtils.js
+
 /**
  * Utilitaires pour la gestion des dates dans le cache
  */
@@ -46,6 +48,21 @@ class DateUtils {
             return null;
         }
     }
+
+    /**
+ * Convertit une date ISO en format dd/mm/yyyy
+ * @param {string} isoDate - Date au format ISO (YYYY-MM-DD)
+ * @returns {string} Date au format dd/mm/yyyy
+ */
+static formatDateForDelivery(isoDate = null) {
+    try {
+      const date = isoDate ? new Date(isoDate) : new Date();
+      return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    } catch (error) {
+      console.error('❌ Erreur formatage date:', error);
+      return null;
+    }
+  }
 
     /**
      * Vérifie si la date est dans la plage spécifiée

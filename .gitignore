@@ -2,7 +2,8 @@ node_modules
 # Ignorer les répertoires
 tests/
 coverage/
-ARCHIVES avant GPT/
+ARCHIVES/
 
 # Ignorer des fichiers spécifiques
 .env
+joy_service_account.json

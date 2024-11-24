@@ -10,9 +10,17 @@ class IntentionAnalyzer {
       apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
-    this.systemPrompt = `Tu es l'assistant JoyJuice qui aide Nizar à gérer ses livraisons de jus de fruits.
+    this.systemPrompt = `Tu es l'assistant JoyJuice qui aide Le livreur à créer ses bons de livraisons de jus de fruits quand il livre ses clients.
     Tu dois analyser chaque message en français pour comprendre naturellement les demandes et identifier les actions requises.
-    
+    Sois attentif aux noms de clients, produits et zones mentionnés, et aux types d'actions demandées.
+    Sois très concis et précis dans tes réponses.
+
+    Pour une demande de création de livraison, tu dois comprendre :
+- Le client concerné
+- Les produits avec leurs quantités
+- Toute information utile (zone, date, etc)
+- Les noms de produits peuvent contenir des espaces et des caractères spéciaux
+
     Format de réponse JSON attendu :
     {
       "type": "CONVERSATION" | "CLIENT_SELECTION" | "ACTION_LIVRAISON" | "DEMANDE_INFO",
@@ -60,66 +68,97 @@ class IntentionAnalyzer {
 
   async analyzeContextualMessage(userId, message) {
     try {
-      console.log(`\n🔍 Analyse contextuelle du message pour l'utilisateur ${userId}:`, message);
-  
-      // Récupérer le contexte existant
-      const context = await contextManager.getConversationContext(userId);
-      console.log('📑 Contexte récupéré:', context);
-  
-      // Construire un message enrichi avec le contexte
-      const enrichedMessage = StringUtils.buildContextualMessage(message, context);
-      console.log('📝 Message enrichi:', enrichedMessage);
-  
-      // Appeler Claude pour obtenir une réponse
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 1024,
-        messages: [{
-          role: 'user',
-          content: enrichedMessage
-        }],
-        system: this.systemPrompt
-      });
-  
-      // Vérification : Réponse vide ou mal formée
-      if (!response?.content?.[0]?.text) {
-        console.error('❌ Réponse Claude vide ou inexistante');
-        throw ErrorUtils.createError('Réponse Claude vide', 'EMPTY_RESPONSE');
-      }
-  
-      let analysisResult;
-      try {
-        // Parsing de la réponse en JSON
-        analysisResult = JSON.parse(response.content[0].text);
-        console.log('🎯 Analyse brute:', analysisResult);
-  
-      } catch (parseError) {
-        console.error('❌ Erreur parsing réponse Claude:', parseError);
-        console.error('Contenu reçu de Claude:', response.content[0]?.text);
-        throw ErrorUtils.createError('Format réponse invalide', 'INVALID_JSON');
-      }
-  
-      // Vérification : Structure de la réponse
-      if (!analysisResult.type || !analysisResult.intention_details) {
-        console.error('❌ Structure réponse invalide:', analysisResult);
-        throw ErrorUtils.createError('Structure réponse invalide', 'INVALID_STRUCTURE');
-      }
-  
-      // Enrichissement avec informations utilisateur
-      analysisResult.userId = userId;
-      analysisResult.currentContext = context;
-  
-      // Validation et enrichissement selon le type
-      await this.validateAndEnrichAnalysis(analysisResult);
-  
-      return analysisResult;
-  
+        // 1. Validation des entrées
+        if (!userId) {
+            console.error('❌ userId manquant pour l\'analyse');
+            throw new Error('userId est requis');
+        }
+        if (!message || typeof message !== 'string') {
+            console.error('❌ Message invalide:', message);
+            throw new Error('Message invalide');
+        }
+
+        console.log(`\n🔍 Analyse contextuelle du message pour l'utilisateur ${userId}:`, message);
+
+        // 2. Récupération contexte et produits
+        const context = await contextManager.getConversationContext(userId);
+        console.log('📑 Contexte récupéré:', context);
+
+        // 3. Extraction et préparation des produits disponibles
+        const availableProducts = context.products?.byId 
+            ? Object.values(context.products.byId).map(p => ({
+                nom: p.Nom_Produit,
+                id: p.ID_Produit,
+                prix: p.Prix_Unitaire
+            }))
+            : [];
+        
+        console.log('📦 Produits disponibles:', availableProducts);
+
+        // 4. Construction du message enrichi
+        const enrichedMessage = `${this.buildContextualMessage(message, context)}
+
+INFORMATIONS IMPORTANTES :
+Liste des produits disponibles :
+${availableProducts.map(p => `- ${p.nom} (ID: ${p.id})`).join('\n')}
+
+Règles d'analyse importantes :
+1. Les noms des produits peuvent contenir des espaces (ex: "Citron 1L" est UN SEUL nom de produit)
+2. L'analyse doit matcher EXACTEMENT un des noms de la liste ci-dessus
+3. Il n'y a pas de différence entre "citron 1L", "Citron 1L" - utiliser toujours la forme exacte de la liste
+
+Exemple d'analyse attendue pour "J'ai livré 3 citron 1L":
+- produit: { nom: "Citron 1L", quantite: 3 } 
+et NON PAS 
+- produit: { nom: "citron", unite: "1L", quantite: 3 }`;
+
+        console.log('📝 Message enrichi:', enrichedMessage);
+
+        // 5. Appel à Claude
+        const response = await this.anthropic.messages.create({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 1024,
+            messages: [{
+                role: 'user',
+                content: enrichedMessage
+            }],
+            system: this.systemPrompt
+        });
+
+        if (!response?.content?.[0]?.text) {
+            console.error('❌ Réponse Claude invalide:', response);
+            throw new Error('Réponse Claude invalide');
+        }
+
+        // 6. Parsing et validation du résultat
+        let analysisResult;
+        try {
+            analysisResult = JSON.parse(response.content[0].text);
+            console.log('🎯 Analyse brute:', analysisResult);
+        } catch (parseError) {
+            console.error('❌ Erreur parsing réponse Claude:', parseError);
+            throw new Error('Format de réponse invalide');
+        }
+
+        // 7. Enrichissement avec contexte
+        analysisResult.userId = userId;
+        analysisResult.currentContext = context;
+        analysisResult.availableProducts = availableProducts;
+
+        // 8. Validation et enrichissement final
+        await this.validateAndEnrichAnalysis(analysisResult);
+        
+        return analysisResult;
+
     } catch (error) {
-      console.error('❌ Erreur dans analyzeContextualMessage:', error);
-      throw error;
+        console.error('❌ Erreur dans analyzeContextualMessage:', {
+            error: error,
+            message: error.message,
+            stack: error.stack
+        });
+        throw error;
     }
-  }
-  
+}
 
   async validateAndEnrichAnalysis(analysis) {
     try {
@@ -156,42 +195,95 @@ class IntentionAnalyzer {
   }
 
   async validateClientSelection(analysis) {
-    const details = analysis.intention_details;
-    console.log('🔍 Validation sélection client:', details.client);
+    try {
+        const details = analysis.intention_details;
+        console.log('🔍 Analyse sélection client:', details);
 
-    if (!details.client?.nom) {
-      analysis.clarification_necessaire = true;
-      analysis.raison_clarification = 'client_manquant';
-      return;
+        // 1. Vérification basique de l'intention
+        if (!details?.client?.nom) {
+            console.log('❌ Pas de client spécifié dans l\'intention');
+            analysis.clarification_necessaire = true;
+            analysis.message = 'Veuillez spécifier un client.';
+            return;
+        }
+
+        // 2. Recherche dans la base
+        console.log('🔍 Recherche client:', {
+            nom: details.client.nom,
+            zone: details.client.zone || 'non spécifiée'
+        });
+
+        const clientResult = await clientLookupService.findClientByNameAndZone(
+            details.client.nom,
+            details.client.zone
+        );
+
+        console.log('🔍 Résultat recherche client:', clientResult);
+
+        // 3. Traitement selon le résultat
+        switch (clientResult.status) {
+            case 'success': {
+                // Client unique trouvé
+                console.log('✅ Client trouvé:', clientResult.client);
+                details.client = {
+                    id: clientResult.client.ID_Client,
+                    nom: clientResult.client.Nom_Client,
+                    zone: clientResult.client.Zone
+                };
+                break;
+            }
+
+            case 'multiple': {
+                // Plusieurs possibilités
+                console.log('ℹ️ Plusieurs clients possibles:', clientResult.zones);
+                analysis.clarification_necessaire = true;
+                analysis.message = clientResult.message;
+                analysis.details = {
+                    matches: clientResult.matches,
+                    zones: clientResult.zones
+                };
+                break;
+            }
+
+            case 'not_found': {
+                // Aucun client trouvé
+                console.log('❌ Client non trouvé');
+                analysis.clarification_necessaire = true;
+                analysis.message = clientResult.message;
+                break;
+            }
+
+            case 'error': {
+                // Erreur technique
+                console.error('❌ Erreur technique:', clientResult.message);
+                analysis.clarification_necessaire = true;
+                analysis.message = 'Une erreur est survenue lors de la recherche.';
+                break;
+            }
+        }
+
+    } catch (error) {
+        console.error('❌ Erreur validation client:', error);
+        analysis.clarification_necessaire = true;
+        analysis.message = 'Erreur lors de la validation.';
     }
+}
 
-    // Recherche du client
-    const clientResult = await clientLookupService.findClientByNameAndZone(
-      details.client.nom,
-      details.client.zone
-    );
-
-    console.log('🔍 Résultat recherche client:', clientResult); 
-
-
-    if (!clientResult) {
-      analysis.clarification_necessaire = true;
-      analysis.raison_clarification = 'client_introuvable';
-      return;
-    }
-
-    if (clientResult.multiple) {
-      analysis.clarification_necessaire = true;
-      analysis.raison_clarification = 'zone_necessaire';
-      analysis.zones_disponibles = clientResult.matches.map(m => m.zone);
-      return;
-    }
-
-    details.client = {
-      ...details.client,
-      id: clientResult.ID_Client
-    };
+async checkZoneExists(zone) {
+  try {
+      // Récupérer la liste de toutes les zones depuis le contexte/cache
+      const clients = await clientsService.getClientsData();
+      const normalizedZone = normalizeString(zone);
+      
+      // Vérifier si cette zone existe
+      return clients.some(client => 
+          normalizeString(client.Zone) === normalizedZone
+      );
+  } catch (error) {
+      console.error('❌ Erreur vérification zone:', error);
+      return false;
   }
+}
 
   async validateLivraisonAction(analysis) {
     const details = analysis.intention_details;
@@ -262,6 +354,41 @@ class IntentionAnalyzer {
     }
 
     details.reponse_attendue = details.sous_type !== 'REMERCIEMENT';
+  }
+
+  buildContextualMessage(message, context) {
+    let enrichedMessage = `Message de Nizar: ${message}\n\nContexte actuel:\n`;
+  
+    if (context.lastClient) {
+        enrichedMessage += `- Dernier client mentionné: ${context.lastClient.Nom_Client} (${context.lastClient.zone || 'pas de zone'})\n`;
+    }
+  
+    if (context.lastDelivery) {
+        enrichedMessage += `- Dernière livraison: ${context.lastDelivery.ID_Livraison}\n`;
+        enrichedMessage += `- Produits de la dernière livraison:\n`;
+        context.lastDelivery.details?.forEach(detail => {
+            enrichedMessage += `  * ${detail.quantite} ${detail.nom_produit}\n`;
+        });
+    }
+  
+    if (context.recentProducts?.size > 0) {
+        enrichedMessage += `- Produits récemment mentionnés: ${Array.from(context.recentProducts).join(', ')}\n`;
+    }
+  
+ // Inclure la liste des produits disponibles
+ if (context.products) {
+  const productList = Object.values(context.products.byId || {}).map(product => product.Nom_Produit).join(', ');
+  enrichedMessage += `- Liste des produits disponibles: ${productList}\n`;
+}
+
+    // Ajouter une notice pour l'analyse attendue
+    enrichedMessage += `\nMerci d'analyser ce message pour en extraire :
+  - Le client concerné (avec sa zone si possible)
+  - Les produits avec leurs quantités
+  - Le type d'action demandée\n`;
+  
+    console.log('📝 Message enrichi pour Claude:', enrichedMessage);
+    return enrichedMessage;
   }
 
   async analyzeMessage(message, context) {

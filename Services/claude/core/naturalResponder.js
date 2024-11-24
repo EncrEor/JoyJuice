@@ -1,197 +1,149 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
-const contextManager = require('./contextManager');
-const StringUtils = require('../utils/stringUtils');
-const ErrorUtils = require('../utils/errorUtils');
-const clientLookupService = require('../../clientLookupService');
 
 class NaturalResponder {
-  constructor() {
-    this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
-    this.systemPrompt = `Tu es l'assistant JoyJuice, concis et efficace.
-    Réponds brièvement, sans formules de politesse superflues.
-    
-    Règles de réponse :
-    1. Pas de "Bonjour", "Au revoir" sauf si explicitement demandé
-    2. Pas de "Je peux vous aider", "N'hésitez pas"
-    3. Commencer directement par l'information ou l'action
-    4. Inclure la zone avec le nom du client quand disponible
-    5. Pour les zones multiples: "Client X présent dans zones: Y, Z"
-    6. Pour les erreurs: message clair et direct
-    
-    Format de réponse JSON attendu :
-    {
-      "message": "La réponse naturelle directe",
-      "context": {
-        "needsZone": boolean,
-        "matches": [] // Si plusieurs clients trouvés
-      }
-    }`;
-  }
-
-  async generateResponse(analysis, result) {
-    try {
-        console.log('🎯 Génération réponse pour:', { analysis, result });
-
-        if (result.status === 'NEED_ZONE') {
-            const zones = result.availableZones?.join(', ');
-            return {
-                message: `Le client "${result.matches[0]?.Nom_Client}" est présent dans plusieurs zones : ${zones}. Veuillez préciser laquelle.`,
-                context: {
-                    needsZone: true,
-                    matches: result.matches || []
-                }
-            };
-        }
-
-        if (result.status === 'NEXT_STEP') {
-            return {
-                message: result.message,
-                context: {
-                    options: result.options || [],
-                    client: result.client
-                }
-            };
-        }
-
-        const promptContent = this.buildPromptFromResults(analysis, result);
-        console.log('📝 Contenu prompt:', promptContent);
-
-        const completion = await this.anthropic.messages.create({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 1024,
-            messages: [{ role: 'user', content: promptContent }],
-            system: this.systemPrompt
+    constructor() {
+        this.anthropic = new Anthropic({
+            apiKey: process.env.ANTHROPIC_API_KEY,
         });
 
-        console.log('📝 Réponse brute de Claude:', completion?.content?.[0]?.text || 'Pas de réponse');
+        this.systemPrompt = `Tu es l'assistant JoyJuice, expert dans la gestion des livraisons de jus de fruits.
+Tu parles en français de manière naturelle, concise et efficace avec Nizar.
 
-        if (!completion?.content?.[0]?.text) {
-            throw new Error("Réponse de Claude manquante ou incorrecte.");
+Règles importantes :
+1. Sois direct et naturel - pas de formalités inutiles
+2. Réponds toujours avec le contexte du client en tête
+4. Si tu as besoin d'une précision, demande-la clairement
+5. Quand le livreur parle de livraison, confirme simplement l'enregistrement de la livraison : 
+Format de réponse pour une livraison effectuée :
+"Bon de livraison L00XX enregistré pour [client] ([zone]) : [quantité] [produit] pour un total de [total] DNT"
+6. Quand tu parles d'un client, inclus toujours sa zone si tu la connais.`;
+    }
+
+    async generateResponse(analysis, result) {
+        try {
+            console.log('💬 Génération réponse naturelle pour:', { analysis, result });
+
+            // Pour les livraisons, on laisse claudeService gérer
+            if (analysis.type === 'ACTION_LIVRAISON') {
+                return result;
+            }
+
+            // Cas spécial pour la liste des clients
+            if (analysis.type === 'DEMANDE_INFO' &&
+                analysis.intention_details.type_info === 'LISTE_CLIENTS' &&
+                result.status === 'SUCCESS') {
+
+                const clients = result.data.clients;
+                // Grouper par zone pour une meilleure lisibilité
+                const clientsByZone = clients.reduce((acc, client) => {
+                    const zone = client.Zone || 'Sans zone';
+                    if (!acc[zone]) acc[zone] = [];
+                    acc[zone].push(client);
+                    return acc;
+                }, {});
+
+                // Formater la réponse
+                let message = 'Voici la liste des clients par zone :\n\n';
+                Object.entries(clientsByZone).forEach(([zone, zoneClients]) => {
+                    message += `${zone}:\n`;
+                    zoneClients.forEach(client => {
+                        message += `• ${client.Nom_Client}\n`;
+                    });
+                    message += '\n';
+                });
+
+                return {
+                    message,
+                    suggestions: ['Voir les détails d\'un client', 'Créer une livraison']
+                };
+            }
+
+            // Construction du prompt contextuel
+            let prompt = this.buildPromptFromResults(analysis, result);
+            console.log('📝 Prompt construit:', prompt);
+
+            // Appel à Claude pour la réponse naturelle
+            const response = await this.anthropic.messages.create({
+                model: 'claude-3-haiku-20240307',
+                max_tokens: 1024,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }],
+                system: this.systemPrompt
+            });
+
+            if (!response?.content?.[0]?.text) {
+                throw new Error('Réponse invalide de Claude');
+            }
+
+            // Enrichir la réponse avec le contexte
+            return this.enrichResponse(
+                response.content[0].text,
+                analysis,
+                result
+            );
+
+        } catch (error) {
+            console.error('❌ Erreur génération réponse:', error);
+            return {
+                message: "Désolé, j'ai rencontré une difficulté. Pouvez-vous reformuler ?",
+                suggestions: ["Réessayer"],
+                error: true
+            };
+        }
+    }
+
+    buildPromptFromResults(analysis, result) {
+        let prompt = 'Contexte :';
+
+        // Ajouter le type d'intention
+        if (analysis.type) {
+            prompt += `\nType d'intention: ${analysis.type}`;
         }
 
-        const response = JSON.parse(completion.content[0].text);
+        // Ajouter les informations client
+        if (result.client) {
+            prompt += `\nClient: ${result.client.Nom_Client} (${result.client.Zone || 'zone non spécifiée'})`;
+        }
 
-        return {
-            message: StringUtils.formatResponse(response.message, result),
-            context: response.context
+        // Ajouter les détails du résultat
+        prompt += `\nRésultat: ${result.status || 'non spécifié'}`;
+        if (result.message) {
+            prompt += `\nMessage: ${result.message}`;
+        }
+
+        // Ajouter les options disponibles
+        if (result.nextActions?.available) {
+            prompt += `\nActions possibles: ${result.nextActions.available.join(', ')}`;
+        }
+
+        return prompt;
+    }
+
+    enrichResponse(message, analysis, result) {
+        const response = {
+            message: message,
+            suggestions: []
         };
 
-    } catch (error) {
-        console.error('❌ Erreur génération réponse:', error);
-        return {
-            message: "Une erreur est survenue lors de la génération de la réponse.",
-            error: error.message
-        };
-    }
-}
-
-  buildPromptFromResults(analysis, result) {
-    let prompt = "Action requise :\n";
-
-    // Informations sur l'intention
-    prompt += `Type: ${analysis.type}\n`;
-    
-    // Informations sur le client
-    if (analysis.client?.nom) {
-      prompt += `Client: ${analysis.client.nom}`;
-      if (analysis.client.zone) prompt += ` (${analysis.client.zone})`;
-      prompt += '\n';
-    }
-
-    // Résultat de l'action
-    prompt += `\nRésultat: ${result.status}\n`;
-    if (result.data) {
-      prompt += JSON.stringify(result.data, null, 2);
-    }
-
-    console.log('🔍 Prompt construit:', prompt);
-    return prompt;
-  }
-
-  async handleClientSelection(result) {
-    console.log('👥 Traitement sélection client:', result);
-
-    if (result.status === 'NEED_ZONE') {
-      const zones = result.availableZones.join(', '); // Ajout des zones disponibles dans le message
-      return {
-        message: `Client ${result.client.nom} présent dans zones: ${result.matches.map(m => m.zone).join(', ')}`,
-        context: {
-          needsZone: true,
-          matches: result.matches
+        // Ajouter des suggestions selon le contexte
+        if (result.nextActions?.available) {
+            response.suggestions = result.nextActions.available;
         }
-      };
-    }
 
-    if (result.status === 'SUCCESS') {
-      return {
-        message: `Client ${result.client.Nom_Client} ${result.client.zone || ''} sélectionné`,
-        context: {
-          currentClient: result.client
+        // Si besoin de clarification zone
+        if (result.status === 'needs_clarification' && result.zones) {
+            response.zones = result.zones;
         }
-      };
+
+        // Ajouter les options si disponibles
+        if (result.options) {
+            response.options = result.options;
+        }
+
+        return response;
     }
-
-    return {
-      message: result.message || "Client non trouvé",
-      error: true
-    };
-  }
-
-  async handleLivraisonCreated(result) {
-    console.log('📦 Traitement création livraison:', result);
-
-    if (result.status !== 'SUCCESS') {
-      return {
-        message: result.message || "Erreur création livraison",
-        error: true
-      };
-    }
-
-    const details = result.livraison.produits
-      .map(p => `${p.quantite} ${p.nom}`)
-      .join(', ');
-
-    return {
-      message: `Livraison ${result.livraison.id} créée: ${details}. Total: ${result.livraison.total}`,
-      context: {
-        currentLivraison: result.livraison
-      }
-    };
-  }
-
-  async handleQuantityUpdate(result) {
-    console.log('🔄 Traitement modification quantités:', result);
-
-    if (result.status !== 'SUCCESS') {
-      return {
-        message: result.message || "Erreur modification quantités",
-        error: true
-      };
-    }
-
-    const changes = result.changes
-      .map(c => `${c.nom}: ${c.ancienne_quantite} → ${c.quantite}`)
-      .join(', ');
-
-    return {
-      message: `Quantités mises à jour: ${changes}`,
-      context: {
-        changes: result.changes
-      }
-    };
-  }
-
-  formatErrorResponse(error) {
-    console.log('❌ Formatage erreur:', error);
-    return {
-      message: error.message || "Une erreur est survenue",
-      error: true,
-      details: error.details
-    };
-  }
 }
 
 module.exports = new NaturalResponder();

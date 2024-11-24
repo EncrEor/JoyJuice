@@ -20,7 +20,8 @@ const COLUMNS = {
   ADRESSE: 3,
   ZONE: 4,
   DELAIS: 5,
-  CONGELATEUR: 6
+  CONGELATEUR: 6,
+  SOLDE: 7
 };
 
 // Fonction helper pour nettoyer les chaînes de caractères
@@ -43,7 +44,8 @@ const arrayToClientObject = (clientArray) => {
     Adresse: clientArray[COLUMNS.ADRESSE],
     zone: clientArray[COLUMNS.ZONE],
     Delais: clientArray[COLUMNS.DELAIS],
-    Congelateur: clientArray[COLUMNS.CONGELATEUR]
+    Congelateur: clientArray[COLUMNS.CONGELATEUR],
+    Solde: parseFloat(clientArray[COLUMNS.SOLDE]?.replace(',', '.') || '0').toFixed(3) // Conversion et formatage
   };
 };
 
@@ -80,7 +82,7 @@ module.exports.getClientsData = async () => {
     console.log('Récupération des données clients...');
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: spreadsheetId,
-      range: 'Clients!A1:G1000',
+      range: 'Clients!A1:H1000',
     });
 
     if (!result || !result.data || !result.data.values) {
@@ -203,8 +205,9 @@ module.exports.addClient = async (clientArray) => {
         clientArray[2] || '',         // Tel
         clientArray[3] || '',         // Adresse
         clientArray[4] || 'Non spécifiée', // Zone
-        clientArray[5] || '30j',      // Delais
-        clientArray[6] || 'non'       // Congelateur
+        clientArray[5] || '7j',      // Delais
+        clientArray[6] || 'non',       // Congelateur
+        clientArray[7] || 0           // Solde initialisé à 0
       ];
   
       console.log('Données finales pour Google Sheets:', finalClientArray);

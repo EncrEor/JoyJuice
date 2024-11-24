@@ -294,7 +294,7 @@ module.exports.addLivraison = async (livraisonData) => {
       const livraisonRow = [
         newLivraisonId,
         formattedDate,
-        client.ID_Client,
+        livraisonData.clientId,  // Utiliser l'ID client reçu
         totalLivraison.toString(),
         "En cours" // Statut par défaut
       ];
