@@ -59,65 +59,90 @@ module.exports.findClientByNameAndZone = async function (name, zone = null) {
     if (!result.data.values || result.data.values.length <= 1) {
       console.log('❌ Aucune donnée client trouvée');
       return {
-        status: 'error',
+        status: 'not_found',
         message: 'Données clients non disponibles'
       };
     }
 
-    // 2. Recherche des correspondances
-    const clients = result.data.values.slice(1);
-    const normalizedName = normalizeString(name);
-    const normalizedZone = zone ? normalizeString(zone) : null;
+    // 2. Recherche par nom
+    const clients = result.data.values.slice(1);  // Skip header
+    const searchName = normalizeString(name);
+    console.log('🔍 Recherche avec nom normalisé:', searchName);
 
-    // 3. Collecte des matches
-    const matches = clients
-      .filter(clientRow => {
-        const clientName = normalizeString(clientRow[COLUMNS.NOM_CLIENT]);
-        const clientZone = normalizeString(clientRow[COLUMNS.ZONE]);
+    // Recherche d'abord avec le nom complet
+    const matchesComplet = clients.filter(clientRow =>
+      normalizeString(clientRow[COLUMNS.NOM_CLIENT]) === searchName
+    ).map(clientRow => arrayToClientObject(clientRow));
 
-        // Si zone spécifiée, filtre par nom ET zone
-        if (normalizedZone) {
-          return clientName === normalizedName && clientZone === normalizedZone;
-        }
-        // Sinon filtre juste par nom
-        return clientName === normalizedName;
-      })
-      .map(clientRow => arrayToClientObject(clientRow));
+    // Si pas de correspondance, chercher avec la première partie du nom
+    if (matchesComplet.length === 0) {
+      const firstPart = searchName.split(' ')[0];
+      console.log('🔍 Tentative avec première partie du nom:', firstPart);
 
-    console.log(`🎯 Correspondances trouvées: ${matches.length}`);
+      const matchesPartiel = clients.filter(clientRow =>
+        normalizeString(clientRow[COLUMNS.NOM_CLIENT]).startsWith(firstPart)
+      ).map(clientRow => arrayToClientObject(clientRow));
 
-    // 4. Analyse des résultats
-    if (matches.length === 0) {
+      if (matchesPartiel.length > 0) {
+        matchesComplet.push(...matchesPartiel);
+      }
+    }
+
+    console.log(`🎯 Correspondances trouvées: ${matchesComplet.length}`);
+
+    // 3. Analyse des résultats
+    if (matchesComplet.length === 0) {
       return {
         status: 'not_found',
-        message: `Aucun client "${name}" trouvé${zone ? ` dans la zone ${zone}` : ''}`
+        message: `Aucun client "${name}" trouvé`
       };
     }
 
-    if (matches.length === 1) {
+    // Si une zone est spécifiée, filtrer par zone
+    if (zone) {
+      const matchesZone = matchesComplet.filter(client =>
+        normalizeString(client.Zone) === normalizeString(zone)
+      );
+
+      if (matchesZone.length === 1) {
+        return {
+          status: 'success',
+          client: matchesZone[0]
+        };
+      }
+
+      if (matchesZone.length === 0) {
+        return {
+          status: 'not_found',
+          message: `Client "${name}" non trouvé dans la zone "${zone}"`
+        };
+      }
+    }
+
+    // Si plusieurs correspondances sans zone spécifiée
+    if (matchesComplet.length > 1) {
+      const availableZones = [...new Set(
+        matchesComplet
+          .map(client => client.Zone)
+          .filter(Boolean)
+      )];
+
       return {
-        status: 'success',
-        client: matches[0]
+        status: 'multiple',
+        message: `Client "${name}" trouvé dans plusieurs zones`,
+        matches: matchesComplet,
+        zones: availableZones
       };
     }
 
-    // 5. Cas multiples : retourner les zones disponibles
-    const availableZones = [...new Set(
-      matches.map(client => client.Zone).filter(Boolean)
-    )];
-
+    // Un seul client trouvé
     return {
-      status: 'multiple',
-      message: `Client "${name}" trouvé dans plusieurs zones`,
-      matches: matches,
-      zones: availableZones
+      status: 'success',
+      client: matchesComplet[0]
     };
 
   } catch (error) {
     console.error('❌ Erreur recherche client:', error);
-    return {
-      status: 'error',
-      message: 'Erreur lors de la recherche'
-    };
+    throw error;
   }
 };

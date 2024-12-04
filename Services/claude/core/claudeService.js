@@ -1,3 +1,4 @@
+// Services/claude/claudeService.js
 const { Anthropic } = require('@anthropic-ai/sdk');
 const contextManager = require('./contextManager');
 const intentAnalyzer = require('./intentAnalyzer');
@@ -9,11 +10,9 @@ const clientHandler = require('../handlers/clientHandler');
 const deliveryHandler = require('../handlers/deliveryHandler');
 const cacheManager = require('./cacheManager/cacheIndex');
 
-
 const path = require('path');
 const claudeConfig = require(path.resolve(__dirname, '../../../config/claudeConfig'));
 
-// Vérification de l'importation
 console.log('🔍 Vérification deliveryHandler importé:', deliveryHandler);
 
 class ClaudeService {
@@ -40,34 +39,34 @@ class ClaudeService {
   async retryRequest(fn, maxRetries = 5, delay = 2000) {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const response = await fn();
+        console.log(`🔄 Tentative ${i + 1}/${maxRetries} de l'appel à Claude...`);
+        const result = await fn();
 
-        // Log de la réponse après chaque tentative
-        console.log(`🔄 Tentative ${i + 1}: Réponse obtenue :`, JSON.stringify(response, null, 2));
+        console.log('📩 Résultat de la tentative:', {
+          success: !!result,
+          type: typeof result,
+          hasError: result?.error ? true : false
+        });
 
-        if (!response || typeof response !== 'object') {
-          console.error(`❌ Réponse invalide ou absente à la tentative ${i + 1}`);
-          throw new Error('Réponse invalide ou absente');
+        if (!result) {
+          throw new Error('Résultat vide reçu de Claude');
         }
 
-        return response; // Si tout est valide, on retourne la réponse.
+        return result;
 
       } catch (error) {
-        console.log(`❌ Tentative ${i + 1}/${maxRetries} échouée`);
+        console.error(`❌ Erreur tentative ${i + 1}/${maxRetries}:`, {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
 
-        // Gestion de l'erreur spécifique au quota (code 529)
-        if (error.status === 529 && i < maxRetries - 1) {
-          const waitTime = delay * Math.pow(2, i); // Délai exponentiel
-          console.log(`⏳ Attente de ${waitTime}ms avant tentative ${i + 2}`);
-          await new Promise((resolve) => setTimeout(resolve, waitTime));
-          continue; // Passe à la tentative suivante.
-        }
-
-        // Si toutes les tentatives échouent, ou si le quota n'est pas la cause, on lance l'erreur.
         if (i === maxRetries - 1) {
-          console.error('❌ Toutes les tentatives ont échoué :', error.message || error);
           throw error;
         }
+
+        console.log(`⏳ Attente de ${delay}ms avant prochaine tentative...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
@@ -76,11 +75,9 @@ class ClaudeService {
     try {
       console.log(`\n📩 Message reçu de ${userId}:`, message);
 
-      // 1. Récupération du contexte
       const context = await contextManager.getConversationContext(userId);
       console.log('📑 Contexte actuel:', context);
 
-      // 2. Récupération des produits depuis le cache
       console.log('🔄 Tentative de récupération de l\'instance du cache...');
       const cacheStore = cacheManager.getCacheStoreInstance();
       if (!cacheStore) {
@@ -95,21 +92,18 @@ class ClaudeService {
         console.log(`✅ ${Object.keys(products.byId).length} produits récupérés depuis le cache.`);
       }
 
-
       if (!products || !products.byId) {
         console.warn('⚠️ Aucun produit trouvé dans le cache.');
       } else {
         console.log(`✅ Produits récupérés (${Object.keys(products.byId).length} éléments).`);
       }
 
-      // Ajout des produits au contexte
       context.products = products?.byId || {};
       console.log('📦 Produits ajoutés au contexte.');
 
-      // 3. Analyse avec retry si besoin
-      const analysis = await this.retryRequest(() =>
-        intentAnalyzer.analyzeContextualMessage(userId, message, context)
-      );
+      const analysis = await this.retryRequest(async () => {
+        return await intentAnalyzer.analyzeContextualMessage(userId, message, context);
+      });
 
       if (!analysis || typeof analysis !== 'object') {
         console.error('❌ Analyse échouée ou réponse vide:', analysis);
@@ -118,17 +112,13 @@ class ClaudeService {
 
       console.log('🎯 Analyse complétée:', analysis);
 
-      // 4. Exécution de l'action appropriée
       const result = await this.executeAction(analysis);
       console.log('✨ Résultat action:', result);
 
-      // 5. Mise à jour du contexte
       await this.updateContext(userId, analysis, result);
 
-      // 6. Génération de la réponse naturelle
       const response = await this.generateResponse(analysis, result);
 
-      // 7. Formatage final
       return this.formatFinalResponse(response, context);
 
     } catch (error) {
@@ -175,10 +165,8 @@ class ClaudeService {
     };
   }
 
-
   async analyzeMessage(userId, message, context) {
     try {
-      // Validation des entrées
       if (!userId || typeof userId !== 'string') {
         throw ErrorUtils.createError('userId invalide', 'INVALID_USER_ID');
       }
@@ -191,15 +179,12 @@ class ClaudeService {
 
       console.log('🔍 Analyse message...');
 
-      // Appel de la méthode analyzeContextualMessage avec gestion des tentatives
       const response = await this.retryRequest(() =>
         intentAnalyzer.analyzeContextualMessage(userId, message)
       );
 
-      // Log de la réponse brute reçue de Claude
       console.log('📩 Réponse brute de Claude :', JSON.stringify(response, null, 2));
 
-      // Validation de la structure de la réponse
       if (!response || typeof response !== 'object' || !response.status) {
         console.error('❌ Réponse de Claude invalide ou vide');
         throw ErrorUtils.createError('Réponse de Claude invalide ou vide', 'INVALID_RESPONSE');
@@ -207,7 +192,6 @@ class ClaudeService {
 
       console.log('🎯 Analyse terminée avec succès :', response);
 
-      // Vérification : Besoin de clarification pour les zones
       if (response.status === 'NEED_ZONE') {
         console.log('⚠️ Besoin de clarification de zone détecté:', response);
         return {
@@ -232,12 +216,10 @@ class ClaudeService {
 
       switch (analysis.type) {
         case 'CLIENT_SELECTION': {
-          // S'assurer que le userId est bien passé
           if (!analysis.userId) {
             throw new Error('userId manquant pour la sélection client');
           }
 
-          // S'assurer que les détails du client sont présents
           if (!analysis.intention_details?.client) {
             throw new Error('Détails client manquants');
           }
@@ -249,7 +231,6 @@ class ClaudeService {
 
           console.log('👥 Résultat sélection client:', clientResult);
 
-          // Gestion explicite des résultats
           if (clientResult.status === 'needs_clarification') {
             return {
               status: 'NEED_ZONE',
@@ -310,7 +291,6 @@ class ClaudeService {
     try {
       console.log('📦 [ClaudeService] Début création nouvelle livraison:', livraisonData);
 
-      // Appel direct au service DeliveryHandler pour centraliser la logique
       const result = await deliveryHandler.createDelivery(livraisonData.userId, livraisonData);
 
       console.log('✅ [ClaudeService] Livraison créée avec succès:', result);
@@ -332,22 +312,18 @@ class ClaudeService {
     }
   }
 
-  //a verifier si pas doublon avec createlivraison
   async handleLivraison(analysis) {
     const details = analysis.intention_details;
     console.log('📦 Traitement livraison:', details);
 
-    // Validation client requis
     if (!details.client?.nom) {
       throw ErrorUtils.createError('Client non spécifié', 'MISSING_CLIENT');
     }
 
-    // Validation produits requis
     if (!details.produits?.length) {
       throw ErrorUtils.createError('Produits non spécifiés', 'MISSING_PRODUCTS');
     }
 
-    // Préparation données livraison
     const livraisonData = {
       clientName: details.client.nom,
       zone: details.client.zone,
@@ -365,7 +341,6 @@ class ClaudeService {
 
       switch (details.type_info) {
         case 'INFO_CLIENT': {
-          // Si on demande des zones, utiliser lookupService directement
           if (details.champs?.includes('zone')) {
             console.log('🔍 Recherche des zones pour:', details.client.nom);
 
@@ -373,7 +348,6 @@ class ClaudeService {
               details.client.nom
             );
 
-            // Si on trouve les zones
             if (clientResult.zones?.length > 0) {
               return {
                 status: 'SUCCESS',
@@ -391,7 +365,6 @@ class ClaudeService {
             };
           }
 
-          // Pour les autres infos client
           if (!details.client?.nom) {
             throw ErrorUtils.createError('Client non spécifié', 'MISSING_CLIENT');
           }
@@ -483,18 +456,31 @@ class ClaudeService {
     try {
       console.log('🎯 Génération réponse pour:', { analysis, result });
 
-      // Cas spécial pour création de livraison
       if (analysis.type === 'ACTION_LIVRAISON' &&
         result.status === 'SUCCESS' &&
         result.livraison?.status === 'success') {
 
-        // Récupérer les données de livraison
         const { livraison_id, total, details } = result.livraison;
-        const client = analysis.intention_details.client;
 
-        // Construire le message formaté
-        const message = `Bon de livraison ${livraison_id} enregistré pour ${client.nom} (${client.zone || '?'}) : ${details.map(d => `${d.Quantite} ${d.nom}`).join(', ')
-          } pour un total de ${total} DNT`;
+        const clientName = analysis.intention_details.client?.nom;
+        const clientZone = result.livraison.zone || analysis.intention_details.client?.Zone || '?';
+
+        console.log('🔍 Données pour le message:', {
+          id: livraison_id,
+          client: clientName,
+          zone: clientZone,
+          details: details,
+          total: total
+        });
+
+        const produitsStr = details.map(d =>
+          `${d.Quantite} ${d.nom || d.ID_Produit}`
+        ).join(', ');
+
+        const today = new Date();
+        const formattedDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+
+        const message = `Bon de livraison ${livraison_id} du ${formattedDate} enregistré pour ${clientName} (${clientZone}) : ${produitsStr} pour un total de ${total} DNT`;
 
         return {
           message,
@@ -502,11 +488,8 @@ class ClaudeService {
         };
       }
 
-
-      // Déléguer la génération de réponse naturelle
       const naturalResponse = await naturalResponder.generateResponse(analysis, result);
 
-      // Enrichir avec le contexte selon le type
       if (result.status === 'NEED_ZONE') {
         return {
           message: naturalResponse.message,
@@ -522,7 +505,6 @@ class ClaudeService {
         message: naturalResponse.message,
         context: result.context || {}
       };
-
 
     } catch (error) {
       console.error('❌ Erreur dans generateResponse:', error);
