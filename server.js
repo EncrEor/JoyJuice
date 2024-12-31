@@ -53,14 +53,24 @@ app.use('/api/chat', chatRouter);
 async function initializeCache() {
     try {
         const cacheManager = await CacheManager.init();
+        if (!cacheManager) {
+            throw new Error('Échec d\'initialisation du CacheManager');
+        }
         const cacheState = cacheManager.getCacheStatus();
+        if (!cacheState) {
+            throw new Error('Impossible de récupérer l\'état du cache');
+        }
         console.log('📊 État du cache après initialisation:', {
-            clients: cacheState.clients?.length || 0,
-            products: cacheState.products?.length || 0,
-            deliveries: cacheState.deliveries?.length || 0
+            clients: cacheState.clientsLoaded ? cacheState.clients?.length || 0 : 0,
+            products: cacheState.productsLoaded ? cacheState.products?.length || 0 : 0,
+            deliveries: cacheState.deliveriesLoaded ? cacheState.deliveries?.length || 0 : 0
         });
     } catch (error) {
-        console.error('❌ Erreur initialisation cache:', error);
+        console.error('❌ Erreur initialisation cache:', {
+            message: error.message || 'Erreur inconnue',
+            stack: error.stack,
+            name: error.name
+        });
     }
 }
 

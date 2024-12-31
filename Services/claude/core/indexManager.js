@@ -1,9 +1,9 @@
 // Services/claude/indexManager.js
 const NodeCache = require('node-cache');
-const clientsService = require('C:/Users/Shadow/Documents/joyjuice_app_backend/Services/clientsService');
-const produitsService = require('C:/Users/Shadow/Documents/joyjuice_app_backend/Services/produitsService');
-const livraisonsService = require('C:/Users/Shadow/Documents/joyjuice_app_backend/Services/livraisonsService');
-
+const clientsService = require('../../../Services/clientsService');
+const produitsService = require('../../../Services/produitsService');
+const livraisonsService = require('../../../Services/livraisonsService');
+const clientLookupService = require('../../clientLookupService');
 const cacheManager = require('./cacheManager/cacheIndex');
 const eventManager = require('./cacheManager/eventManager');
 const StringUtils = require('../utils/stringUtils');
@@ -214,22 +214,25 @@ class IndexManager {
         }
     }
 
-    async getClientInfo(clientId) {
+    async getClientInfo(clientData) {
         try {
-            if (IndexManager.isTestMode && IndexManager.testData) {
-                return IndexManager.testData.clients.byId[clientId] || null;
-            }
-
-            const clients = IndexManager.dataCache.get('clients');
-            if (!clients || !clients.byId) {
-                console.log('Cache clients non disponible');
-                return null;
-            }
-
-            return clients.byId[clientId] || null;
+            console.log('🔍 Recherche client:', clientData);
+    
+            // Recherche via clientLookupService
+            const result = await clientLookupService.findClientByNameAndZone(
+                clientData.nom || clientData,
+                clientData.zone
+            );
+    
+            // Retourner le résultat direct car déjà formaté correctement
+            return result;
+    
         } catch (error) {
-            console.error('Erreur lors de la récupération des informations client:', error);
-            return null;
+            console.error('❌ Erreur recherche client:', error);
+            return {
+                status: 'error',
+                message: error.message
+            };
         }
     }
 

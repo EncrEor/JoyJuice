@@ -7,6 +7,9 @@ const productLookupService = require('../../productLookupService');
 const DateUtils = require('../core/cacheManager/dateUtils');
 
 class DeliveryHandler {
+  constructor() {
+    // Add initialization
+  }
 
   async createDelivery(userId, deliveryData) {
     try {

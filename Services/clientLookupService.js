@@ -1,6 +1,7 @@
 // Services/clientLookupService.js
 const { google } = require('googleapis');
 const dotenv = require('dotenv');
+
 dotenv.config();
 
 // Auth Google Sheets
@@ -12,15 +13,23 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: 'v4', auth });
 const spreadsheetId = process.env.SPREADSHEET_ID;
 
-// Constantes des colonnes
+// Constantes pour les colonnes
 const COLUMNS = {
-  ID_CLIENT: 0,
-  NOM_CLIENT: 1,
-  TEL: 2,
-  ADRESSE: 3,
-  ZONE: 4,
-  DELAIS: 5,
-  CONGELATEUR: 6
+  ID: 0,
+  Nom_Client: 1,
+  zone: 2,	
+  Actif: 3,
+  Mode_comptable: 4,
+  CYCLE: 5,
+  Lat_sold_Date: 6, 
+  Paid: 7,
+  Next_sold_date: 8,
+  Billing_period: 9,
+  PAY_MODE: 10,
+  PAY_DELAY: 11,
+  LAST_PAY_DATE: 12,
+  Tel: 13,
+  Adresse: 14
 };
 
 // Normalisation des chaînes
@@ -33,16 +42,37 @@ const normalizeString = (str) => {
 
 // Conversion en objet client
 const arrayToClientObject = (clientArray) => {
-  if (!clientArray) return null;
-  return {
-    ID_Client: clientArray[COLUMNS.ID_CLIENT],
-    Nom_Client: clientArray[COLUMNS.NOM_CLIENT],
-    Tel: clientArray[COLUMNS.TEL],
-    Adresse: clientArray[COLUMNS.ADRESSE],
-    Zone: clientArray[COLUMNS.ZONE],
-    Delais: clientArray[COLUMNS.DELAIS],
-    Congelateur: clientArray[COLUMNS.CONGELATEUR]
+  if (!clientArray || clientArray.length < Object.keys(COLUMNS).length) {
+    console.warn('⚠️ Ligne client invalide ou incomplète :', clientArray);
+    return null;
+  }
+
+  const client = {
+    ID_Client: clientArray[COLUMNS.ID],
+    Nom_Client: clientArray[COLUMNS.Nom_Client],
+    Tel: clientArray[COLUMNS.Tel],
+    Adresse: clientArray[COLUMNS.Adresse],
+    Zone: clientArray[COLUMNS.zone],
+    Delais: clientArray[COLUMNS.Delais],
+    Actif: clientArray[COLUMNS.Actif],
+    Mode_comptable: clientArray[COLUMNS.Mode_comptable],
+    CYCLE: clientArray[COLUMNS.CYCLE],
+    Lat_sold_Date: clientArray[COLUMNS.Lat_sold_Date],
+    Paid: clientArray[COLUMNS.Paid],
+    Next_sold_date: clientArray[COLUMNS.Next_sold_date],
+    Billing_period: clientArray[COLUMNS.Billing_period],
+    PAY_MODE: clientArray[COLUMNS.PAY_MODE],
+    PAY_DELAY: clientArray[COLUMNS.PAY_DELAY],
+    LAST_PAY_DATE: clientArray[COLUMNS.LAST_PAY_DATE]
   };
+
+  // Validation des champs critiques
+  if (!client.ID_Client || !client.Nom_Client) {
+    console.warn('⚠️ Client ignoré à cause de données manquantes :', client);
+    return null;
+  }
+
+  return client;
 };
 
 // Fonction principale de recherche
@@ -53,7 +83,7 @@ module.exports.findClientByNameAndZone = async function (name, zone = null) {
     // 1. Récupération des données
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: 'Clients!A1:G1000',
+      range: 'Clients!A1:O1000',
     });
 
     if (!result.data.values || result.data.values.length <= 1) {
@@ -64,51 +94,42 @@ module.exports.findClientByNameAndZone = async function (name, zone = null) {
       };
     }
 
-    // 2. Recherche par nom
-    const clients = result.data.values.slice(1);  // Skip header
-    const searchName = normalizeString(name);
-    console.log('🔍 Recherche avec nom normalisé:', searchName);
+    // 2. Conversion et validation des données
+    const clients = result.data.values.slice(1) // Skip header
+      .map(arrayToClientObject)
+      .filter(client => client !== null);
 
-    // Recherche d'abord avec le nom complet
-    const matchesComplet = clients.filter(clientRow =>
-      normalizeString(clientRow[COLUMNS.NOM_CLIENT]) === searchName
-    ).map(clientRow => arrayToClientObject(clientRow));
-
-    // Si pas de correspondance, chercher avec la première partie du nom
-    if (matchesComplet.length === 0) {
-      const firstPart = searchName.split(' ')[0];
-      console.log('🔍 Tentative avec première partie du nom:', firstPart);
-
-      const matchesPartiel = clients.filter(clientRow =>
-        normalizeString(clientRow[COLUMNS.NOM_CLIENT]).startsWith(firstPart)
-      ).map(clientRow => arrayToClientObject(clientRow));
-
-      if (matchesPartiel.length > 0) {
-        matchesComplet.push(...matchesPartiel);
-      }
-    }
-
-    console.log(`🎯 Correspondances trouvées: ${matchesComplet.length}`);
-
-    // 3. Analyse des résultats
-    if (matchesComplet.length === 0) {
+    if (clients.length === 0) {
+      console.log('❌ Aucun client valide trouvé après validation.');
       return {
         status: 'not_found',
-        message: `Aucun client "${name}" trouvé`
+        message: 'Aucun client valide disponible'
       };
     }
 
-    // Si une zone est spécifiée, filtrer par zone
+    const searchName = normalizeString(name);
+    console.log('🔍 Recherche avec nom normalisé:', searchName);
+
+    // 3. Recherche exacte par nom
+    const matchesExact = clients.filter(client => 
+      normalizeString(client.Nom_Client) === searchName
+    );
+
+    if (matchesExact.length === 1) {
+      console.log(`✅ Correspondance exacte trouvée :`, matchesExact[0]);
+      return { status: 'success', client: matchesExact[0] };
+    }
+
+    // 4. Recherche par zone si spécifiée
     if (zone) {
-      const matchesZone = matchesComplet.filter(client =>
+      const matchesZone = clients.filter(client => 
+        normalizeString(client.Nom_Client) === searchName &&
         normalizeString(client.Zone) === normalizeString(zone)
       );
 
       if (matchesZone.length === 1) {
-        return {
-          status: 'success',
-          client: matchesZone[0]
-        };
+        console.log(`✅ Correspondance exacte avec zone trouvée :`, matchesZone[0]);
+        return { status: 'success', client: matchesZone[0] };
       }
 
       if (matchesZone.length === 0) {
@@ -119,26 +140,35 @@ module.exports.findClientByNameAndZone = async function (name, zone = null) {
       }
     }
 
-    // Si plusieurs correspondances sans zone spécifiée
-    if (matchesComplet.length > 1) {
+    // 5. Recherche partielle si aucune correspondance exacte
+    console.log('🔍 Tentative avec recherche partielle...');
+    const matchesPartial = clients.filter(client => 
+      normalizeString(client.Nom_Client).startsWith(searchName)
+    );
+
+    if (matchesPartial.length === 1) {
+      console.log(`✅ Correspondance partielle trouvée :`, matchesPartial[0]);
+      return { status: 'success', client: matchesPartial[0] };
+    }
+
+    if (matchesPartial.length > 1) {
       const availableZones = [...new Set(
-        matchesComplet
-          .map(client => client.Zone)
-          .filter(Boolean)
+        matchesPartial.map(client => client.Zone).filter(Boolean)
       )];
 
+      console.log(`⚠️ Ambiguïté détectée : plusieurs clients trouvés.`);
       return {
         status: 'multiple',
         message: `Client "${name}" trouvé dans plusieurs zones`,
-        matches: matchesComplet,
+        matches: matchesPartial,
         zones: availableZones
       };
     }
 
-    // Un seul client trouvé
+    // Aucune correspondance
     return {
-      status: 'success',
-      client: matchesComplet[0]
+      status: 'not_found',
+      message: `Aucun client "${name}" trouvé`
     };
 
   } catch (error) {

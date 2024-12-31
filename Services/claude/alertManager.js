@@ -1,6 +1,8 @@
 // Services/claude/alertManager.js
 const NodeCache = require('node-cache');
-const indexManager = require('../Services/claude/indexManager');
+
+const indexManager = require('./core/indexManager');
+console.log('IndexManager instance:', indexManager);
 
 class AlertManager {
     static instance = null;
@@ -119,7 +121,9 @@ class AlertManager {
     async checkTimingAlerts(clientId) {
         const alerts = [];
         // Pour les tests, utiliser le mock si getClientInfo n'est pas disponible
-        const clientInfo = await indexManager.getClientInfo?.(clientId) || this.mockClientInfo;
+        const clientInfo = testMode ?
+  (mockData?.clientInfo || this.mockClientInfo) :
+  await indexManager.getClientInfo(clientId);
     
         if (!clientInfo) return alerts;
     

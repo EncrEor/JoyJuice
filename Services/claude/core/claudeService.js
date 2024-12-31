@@ -1,4 +1,5 @@
 // Services/claude/claudeService.js
+const deliveryHandler = require('../handlers/deliveryHandler');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const contextManager = require('./contextManager');
 const intentAnalyzer = require('./intentAnalyzer');
@@ -7,23 +8,36 @@ const ErrorUtils = require('../utils/errorUtils');
 const clientLookupService = require('../../clientLookupService');
 const contextResolver = require('./contextResolver');
 const clientHandler = require('../handlers/clientHandler');
-const deliveryHandler = require('../handlers/deliveryHandler');
 const cacheManager = require('./cacheManager/cacheIndex');
+const indexManager = require('./indexManager');
+console.log('IndexManager in claudeService:', indexManager);
+
 
 const path = require('path');
 const claudeConfig = require(path.resolve(__dirname, '../../../config/claudeConfig'));
 
-console.log('🔍 Vérification deliveryHandler importé:', deliveryHandler);
+try {
+  const deliveryHandler = require('../handlers/deliveryHandler');
+  console.log('🔍 Vérification deliveryHandler importé:', deliveryHandler);
+} catch (err) {
+  ErrorUtils.logError(err, 'Import deliveryHandler');
+}
 
 class ClaudeService {
   constructor() {
-    this.config = claudeConfig;
-    this.client = this.config.getClient();
-    this.systemPrompts = {
-      default: this.config.getSystemPrompt('conversation'),
-      analysis: this.config.getSystemPrompt('analysis'),
-      completion: this.config.getSystemPrompt('completion'),
-    };
+    try {
+      this.config = claudeConfig;
+      this.client = this.config.getClient();
+      this.systemPrompts = {
+        default: this.config.getSystemPrompt('conversation'),
+        analysis: this.config.getSystemPrompt('analysis'),
+        completion: this.config.getSystemPrompt('completion')
+      };
+      console.log('✅ ClaudeService initialisé avec succès');
+    } catch (error) {
+      console.error('❌ Erreur dans le constructeur de ClaudeService:', error?.message || 'Erreur inconnue');
+      throw error; // Rethrow to handle upstream
+    }
   }
 
   async initialize() {
@@ -31,7 +45,11 @@ class ClaudeService {
       await contextManager.initializeCache();
       console.log('✅ Service Claude initialisé');
     } catch (error) {
-      console.error('❌ Erreur initialisation Claude:', error);
+      console.error('❌ Erreur initialisation Claude:', {
+        message: error?.message || 'Erreur inconnue',
+        code: error?.code,
+        stack: error?.stack
+    });
       throw error;
     }
   }
@@ -341,35 +359,29 @@ class ClaudeService {
 
       switch (details.type_info) {
         case 'INFO_CLIENT': {
+          if (!details.client?.nom) {
+            throw ErrorUtils.createError('Client non spécifié', 'MISSING_CLIENT');
+          }
+        
+          // Recherche des zones spécifiquement demandées
           if (details.champs?.includes('zone')) {
-            console.log('🔍 Recherche des zones pour:', details.client.nom);
-
-            const clientResult = await clientLookupService.findClientByNameAndZone(
-              details.client.nom
-            );
-
-            if (clientResult.zones?.length > 0) {
+            const clientResult = await clientLookupService.findClientByNameAndZone(details.client.nom);
+            
+            if (clientResult.status === 'multiple') {
               return {
                 status: 'SUCCESS',
-                message: `Le client ${details.client.nom} est présent dans les zones: ${clientResult.zones.join(', ')}`,
+                message: `Client ${details.client.nom} présent dans les zones: ${clientResult.zones.join(', ')}`,
                 data: {
                   zones: clientResult.zones,
                   matches: clientResult.matches
                 }
               };
             }
-
-            return {
-              status: 'NOT_FOUND',
-              message: `Aucune zone trouvée pour le client ${details.client.nom}`
-            };
           }
-
-          if (!details.client?.nom) {
-            throw ErrorUtils.createError('Client non spécifié', 'MISSING_CLIENT');
-          }
-
-          return await clientHandler.getClientInfo(details.client);
+        
+          // Recherche info complète client 
+          const clientResult = await indexManager.getClientInfo(details.client);
+          return clientResult;
         }
 
         case 'STATISTIQUES':

@@ -4,6 +4,8 @@ const ValidationUtils = require('../utils/validationUtils');
 const ErrorUtils = require('../utils/errorUtils');
 const clientLookupService = require('../../clientLookupService');
 const contextManager = require('../core/contextManager');
+const indexManager = require('../core/indexManager');
+console.log('IndexManager instance:', indexManager);
 
 class ClientHandler {
   async findClient(clientName, zone = null) {
