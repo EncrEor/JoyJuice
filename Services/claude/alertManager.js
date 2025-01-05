@@ -2,7 +2,7 @@
 const NodeCache = require('node-cache');
 
 const indexManager = require('./core/indexManager');
-console.log('IndexManager instance:', indexManager);
+//console.log('IndexManager instance:', indexManager);
 
 class AlertManager {
     static instance = null;

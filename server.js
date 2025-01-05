@@ -52,25 +52,37 @@ app.use('/api/chat', chatRouter);
 // ===== 6. INITIALISATION DU CACHE =====
 async function initializeCache() {
     try {
+        console.log('🔄 Initialisation du cache...');
         const cacheManager = await CacheManager.init();
+        
         if (!cacheManager) {
             throw new Error('Échec d\'initialisation du CacheManager');
         }
+
+        const cacheStore = cacheManager.getCacheStore();
+        if (!cacheStore) {
+            throw new Error('CacheStore non disponible');
+        }
+
         const cacheState = cacheManager.getCacheStatus();
         if (!cacheState) {
             throw new Error('Impossible de récupérer l\'état du cache');
         }
+
         console.log('📊 État du cache après initialisation:', {
-            clients: cacheState.clientsLoaded ? cacheState.clients?.length || 0 : 0,
-            products: cacheState.productsLoaded ? cacheState.products?.length || 0 : 0,
-            deliveries: cacheState.deliveriesLoaded ? cacheState.deliveries?.length || 0 : 0
+            clients: cacheState.clientsLoaded ? Object.keys(cacheStore.getData('clients')?.byId || {}).length : 0,
+            products: cacheState.productsLoaded ? Object.keys(cacheStore.getData('products')?.byId || {}).length : 0,
+            deliveries: cacheState.deliveriesLoaded ? Object.keys(cacheStore.getData('deliveries')?.byId || {}).length : 0
         });
+
+        return cacheManager;
     } catch (error) {
         console.error('❌ Erreur initialisation cache:', {
             message: error.message || 'Erreur inconnue',
             stack: error.stack,
             name: error.name
         });
+        throw error; // Propager l'erreur pour la gestion en amont
     }
 }
 
@@ -103,7 +115,7 @@ app.use((err, req, res, next) => {
 });
 
 // ===== 8. DÉMARRAGE DU SERVEUR =====
-app.listen(PORT, async () => {
+const server = app.listen(PORT, () => {
     console.log(`🚀 Serveur démarré sur le port ${PORT}`);
     console.log('\n📋 Routes disponibles :');
     console.log('- /api/clients          : Gestion des clients');
@@ -113,10 +125,18 @@ app.listen(PORT, async () => {
     console.log('- /api/detailscommandes : Détails des commandes');
     console.log('- /api/detailslivraisons: Détails des livraisons');
     console.log('- /api/chat             : Interface de chat\n');
-    
-    // Initialisation du cache au démarrage
-    console.log('🔄 Initialisation du cache...');
-    await initializeCache();
+
+    (async () => {
+        try {
+            console.log('🔄 Initialisation du cache...');
+            await initializeCache();
+        } catch (error) {
+            console.error('❌ Erreur critique lors de l\'initialisation:', error);
+            server.close(() => {
+                process.exit(1);
+            });
+        }
+    })();
 });
 
 module.exports = app;

@@ -13,6 +13,10 @@ const livraisonsService = require('../../../livraisonsService');
 
 class CacheManager {
     static instance = null;
+    static cacheState = {  // Ajout de l'initialisation
+        lastRefresh: new Map(),
+        errors: new Map()
+    };
 
     constructor() {
         if (CacheManager.instance) {
@@ -360,9 +364,9 @@ async verifyCacheIntegrity(type) {
     // Obtenir l'état du cache
     getCacheStatus() {
         return {
-            clientsLoaded: cacheStore.getData('clients') !== undefined,
-            productsLoaded: cacheStore.getData('products') !== undefined,
-            deliveriesLoaded: cacheStore.getData('deliveries') !== undefined,
+            clientsLoaded: this.cacheStore.getData('clients') !== undefined,
+            productsLoaded: this.cacheStore.getData('products') !== undefined,
+            deliveriesLoaded: this.cacheStore.getData('deliveries') !== undefined,
             lastRefresh: Object.fromEntries(CacheManager.cacheState.lastRefresh),
             errors: Object.fromEntries(CacheManager.cacheState.errors)
         };

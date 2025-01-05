@@ -1,5 +1,4 @@
 // Services/claude/claudeService.js
-const deliveryHandler = require('../handlers/deliveryHandler');
 const { Anthropic } = require('@anthropic-ai/sdk');
 const contextManager = require('./contextManager');
 const intentAnalyzer = require('./intentAnalyzer');
@@ -42,14 +41,14 @@ class ClaudeService {
 
   async initialize() {
     try {
-      await contextManager.initializeCache();
+      await cacheManager.init();  // <- Utiliser cacheManager.init() au lieu de contextManager.initializeCache()
       console.log('✅ Service Claude initialisé');
     } catch (error) {
       console.error('❌ Erreur initialisation Claude:', {
         message: error?.message || 'Erreur inconnue',
         code: error?.code,
         stack: error?.stack
-    });
+      });
       throw error;
     }
   }
@@ -556,4 +555,19 @@ class ClaudeService {
   }
 }
 
-module.exports = new ClaudeService();
+const claudeService = new ClaudeService();
+
+const initService = async () => {
+  try {
+    await claudeService.initialize();
+    return claudeService;
+  } catch (error) {
+    console.error('❌ Erreur initialisation ClaudeService:', {
+      message: error.message, 
+      stack: error.stack
+    });
+    throw error;
+  }
+};
+
+module.exports = initService();
