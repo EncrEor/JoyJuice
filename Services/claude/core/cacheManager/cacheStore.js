@@ -115,6 +115,7 @@ getData(key) {
  * @returns {boolean} Succès de l'opération
  */
 setData(key, value, ttl = undefined) {
+    console.log(`📝 Mise en cache pour ${key} :`, value);
     try {
         if (value === undefined || value === null) {
             console.warn(`⚠️ Tentative d'écriture de données nulles/undefined pour ${key}`);

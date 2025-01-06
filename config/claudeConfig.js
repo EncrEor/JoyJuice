@@ -26,7 +26,7 @@ class ClaudeConfig {
     this.config = {
       maxTokens: {
         conversation: 1024,
-        analysis: 2048,
+        analysis: 3000,
         default: 1024
       }
     };

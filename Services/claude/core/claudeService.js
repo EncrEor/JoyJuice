@@ -232,6 +232,40 @@ class ClaudeService {
       console.log('⚡ Exécution action:', analysis.type);
 
       switch (analysis.type) {
+        
+          case 'DELIVERY': {
+            console.log('📦 Traitement message livraison');
+            
+            // Initialisation des analyseurs
+            const deliveryAnalyzer = new DeliveryAnalyzer(
+              require('../../clientsService'),
+              require('../../produitsService')
+            );
+            await deliveryAnalyzer.initialize();
+            
+            // Analyse du message
+            const deliveryData = await deliveryAnalyzer.analyzeMessage(analysis.message);
+            console.log('✅ Données livraison analysées:', deliveryData);
+            
+            // Traitement de la livraison
+            const processor = new DeliveryProcessor(
+              require('../../livraisonsService'),
+              require('../../produitsService')
+            );
+            await processor.initialize();
+            
+            const result = await processor.processDelivery(deliveryData);
+            console.log('✅ Livraison traitée:', result);
+            
+            return {
+              status: 'SUCCESS',
+              type: 'DELIVERY',
+              data: result
+            };
+          }
+
+        
+        
         case 'CLIENT_SELECTION': {
           if (!analysis.userId) {
             throw new Error('userId manquant pour la sélection client');
@@ -467,37 +501,37 @@ class ClaudeService {
     try {
       console.log('🎯 Génération réponse pour:', { analysis, result });
 
-      if (analysis.type === 'ACTION_LIVRAISON' &&
+      if (analysis.type === 'ACTION_LIVRAISON' && 
         result.status === 'SUCCESS' &&
         result.livraison?.status === 'success') {
 
-        const { livraison_id, total, details } = result.livraison;
+      const { livraison_id, total, details } = result.livraison;
+      
+      const clientName = analysis.intention_details.client?.nom;
+      const clientZone = result.livraison.zone || analysis.intention_details.client?.Zone || '?';
+      
+      console.log('🔍 Données pour le message:', {
+        id: livraison_id,
+        client: clientName,
+        zone: clientZone,
+        details: details,
+        total: total
+      });
 
-        const clientName = analysis.intention_details.client?.nom;
-        const clientZone = result.livraison.zone || analysis.intention_details.client?.Zone || '?';
+      const produitsStr = details.map(d => 
+        `${d.Quantite} ${d.nom || d.ID_Produit}`
+      ).join(', ');
+      
+      const today = new Date();
+      const formattedDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+      
+      const message = `Bon de livraison ${livraison_id} du ${formattedDate} enregistré pour ${clientName} (${clientZone}) : ${produitsStr} pour un total de ${total} DNT`;
 
-        console.log('🔍 Données pour le message:', {
-          id: livraison_id,
-          client: clientName,
-          zone: clientZone,
-          details: details,
-          total: total
-        });
-
-        const produitsStr = details.map(d =>
-          `${d.Quantite} ${d.nom || d.ID_Produit}`
-        ).join(', ');
-
-        const today = new Date();
-        const formattedDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
-
-        const message = `Bon de livraison ${livraison_id} du ${formattedDate} enregistré pour ${clientName} (${clientZone}) : ${produitsStr} pour un total de ${total} DNT`;
-
-        return {
-          message,
-          suggestions: ['Voir le détail', 'Nouvelle livraison']
-        };
-      }
+      return {
+        message,
+        suggestions: ['Voir le détail', 'Nouvelle livraison']
+      };
+    }
 
       const naturalResponse = await naturalResponder.generateResponse(analysis, result);
 
