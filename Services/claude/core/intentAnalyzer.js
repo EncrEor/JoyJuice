@@ -4,6 +4,9 @@ const contextManager = require('../core/contextManager');
 const StringUtils = require('../utils/stringUtils');
 const ErrorUtils = require('../utils/errorUtils');
 const clientLookupService = require('../../clientLookupService');
+const cacheManager = require('./cacheManager/cacheIndex');
+const claudeService = require('./claudeService');
+const DeliveryAnalyzer = require('./delivery/deliveryAnalyzer');
 
 class IntentionAnalyzer {
   constructor() {
@@ -16,15 +19,9 @@ class IntentionAnalyzer {
     Sois attentif aux noms de clients, produits et zones mentionnés, et aux types d'actions demandées.
     Sois très concis et précis dans tes réponses.
 
-    Pour une demande de création de livraison, tu dois comprendre :
-- Le client concerné
-- Les produits avec leurs quantités
-- Toute information utile (zone, date, etc)
-- Les noms de produits peuvent contenir des espaces et des caractères spéciaux
-
     Format de réponse JSON attendu :
     {
-      "type": "CONVERSATION" | "CLIENT_SELECTION" | "ACTION_LIVRAISON" | "DEMANDE_INFO",
+      "type": "CONVERSATION" | "CLIENT_SELECTION" | "DELIVERY" | "DEMANDE_INFO",
       "intention_details": {
         // Pour CONVERSATION
         "sous_type": "SALUTATION" | "QUESTION" | "REMERCIEMENT" | "DISCUSSION",
@@ -37,7 +34,7 @@ class IntentionAnalyzer {
           "type_selection": "EXPLICITE" | "IMPLICITE"
         },
 
-        // Pour ACTION_LIVRAISON
+        // Pour "DELIVERY"
         "type_action": "CREATION" | "MODIFICATION" | "ANNULATION",
         "client": {
           "nom": string,
@@ -68,209 +65,127 @@ class IntentionAnalyzer {
 
   async analyzeContextualMessage(userId, message) {
     try {
+      console.log('📥 Analyse message:', { userId, message: message.slice(0, 100) });
+      
+      if (!userId || !message?.trim()) {
+        throw ErrorUtils.createError('Paramètres invalides', 'INVALID_PARAMS');
+      }
+  
       const context = await contextManager.getConversationContext(userId);
-      const lastResult = context.lastAnalysisResult;
-
-      if (lastResult?.result?.status === 'NEED_ZONE' &&
-        lastResult.result?.availableZones?.includes(message.trim())) {
-
-        console.log('🔍 Traitement réponse zone:', {
-          zone: message.trim(),
-          lastResult: lastResult
-        });
-
-        try {
-          const resolvedClient = await contextManager.resolveClientWithZone(
-            lastResult.result.originalName.split(' ')[0],
-            message.trim()
-          );
-
-          console.log('✅ Client résolu avec zone:', resolvedClient);
-
-          if (resolvedClient.status === 'SUCCESS') {
-            await contextManager.updateConversationContext(userId, {
-              lastClient: resolvedClient.client
-            });
-
-            return {
-              type: lastResult.type,
-              intention_details: {
-                ...lastResult.intention_details,
-                client: {
-                  id: resolvedClient.client.ID_Client,
-                  nom: resolvedClient.client.Nom_Client,
-                  zone: resolvedClient.client.Zone
-                }
-              },
-              resolvedClient: resolvedClient.client,
-              contexte_necessaire: false,
-              clarification_necessaire: false
-            };
-          }
-        } catch (error) {
-          console.error('❌ Erreur résolution client avec zone:', error);
-          return {
-            type: 'ERROR',
-            message: 'Erreur lors de la résolution du client',
-            error: error.message
-          };
-        }
-      }
-
-      if (!userId) {
-        console.error('❌ userId manquant pour l\'analyse');
-        throw new Error('userId est requis');
-      }
-      if (!message || typeof message !== 'string') {
-        console.error('❌ Message invalide:', message);
-        throw new Error('Message invalide');
-      }
-      if (!message.trim()) {
-        console.error('❌ Message vide après nettoyage:', message);
-        throw new Error('Message vide après nettoyage');
-      }
-
-      console.log(`\n🔍 Analyse contextuelle du message pour l'utilisateur ${userId}:`, message);
-
-      const availableProducts = context.products?.byId
-        ? Object.values(context.products.byId).map(p => ({
-          nom: p.Nom_Produit,
-          id: p.ID_Produit,
-          prix: p.Prix_Unitaire
-        }))
-        : [];
-
-      console.log('📦 Produits disponibles:', availableProducts);
-
-      const enrichedMessage = `${this.buildContextualMessage(message, context)}
-
-INFORMATIONS IMPORTANTES :
-Liste des produits disponibles :
-${availableProducts.map(p => `- ${p.nom} (ID: ${p.id})`).join('\n')}
-
-Règles d'analyse importantes :
-1. Les noms des produits peuvent contenir des espaces (ex: "Citron 1L" est UN SEUL nom de produit)
-2. L'analyse doit matcher EXACTEMENT un des noms de la liste ci-dessus
-3. Il n'y a pas de différence entre "citron 1L", "Citron 1L" - utiliser toujours la forme exacte de la liste
-
-Exemple d'analyse attendue pour "J'ai livré 3 citron 1L":
-- produit: { nom: "Citron 1L", quantite: 3 }
-et NON PAS
-- produit: { nom: "citron", unite: "1L", quantite: 3 }`;
-
-      console.log('📝 Message enrichi:', enrichedMessage);
-
-      let analysisResult;
+      console.log('📑 Contexte récupéré:', {
+        hasLastClient: !!context?.lastClient,
+        hasLastAnalysis: !!context?.lastAnalysisResult
+      });
+  
+      // Enrichissement contexte avec produits
       try {
-        if (!enrichedMessage || typeof enrichedMessage !== 'string') {
-          throw new Error('Message enrichi invalide');
-        }
-
-        console.log('🤖 Envoi requête à Claude:', {
-          model: 'claude-3-haiku-20240307',
-          messageLength: enrichedMessage.length,
-          messagePreview: enrichedMessage.slice(0, 100) + '...',
-          context: {
-            hasClient: !!context.lastClient,
-            productsCount: Object.keys(context.products || {}).length
+        const cacheStore = await cacheManager.getCacheStoreInstance();
+        if (cacheStore) {
+          const products = cacheStore.getData('products');
+          if (products?.byId) {
+            context.products = products;
+            console.log(`✅ ${Object.keys(products.byId).length} produits en contexte`);
           }
-        });
+        }
+      } catch (cacheError) {
+        console.error('❌ Erreur cache:', cacheError);
+      }
+  
+      // Détection du type
+      const messageType = this.detectMessageType(message);
+      console.log('🎯 Type détecté:', messageType);
+  
+      // Traitement selon type
+      switch(messageType) {
+        case 'DEMANDE_INFO': 
+          return await messageHandler.processMessage(userId, message);
+        
+        case 'CONVERSATION':
+          return {
+            type: 'CONVERSATION',
+            intention_details: await naturalResponder.generateResponse({ message, context })
+          };
+  
+        default: { // DELIVERY par défaut
+          const deliveryAnalyzer = new DeliveryAnalyzer(context);
+          await deliveryAnalyzer.initialize();
+          return await deliveryAnalyzer.analyzeMessage(message);
+        }
+      }
+  
+    } catch (error) {
+      console.error('❌ Erreur analyse:', error);
+      return {
+        type: 'ERROR',
+        error: { code: error.code || 'ANALYSIS_ERROR', message: error.message }
+      };
+    }
+  }
+  
+  detectMessageType(message) {
+    const firstLine = message.toLowerCase().trim().split('\n')[0];
+    
+    if (/^(?:info|solde|tel|adresse|status|combien)\b/.test(firstLine)) {
+      return 'DEMANDE_INFO';
+    }
+    
+    if (/^(?:bonjour|merci|au revoir|ok|oui|non)\b/.test(firstLine)) {
+      return 'CONVERSATION';
+    }
+  
+    return 'DELIVERY';
+  }
 
-        let response = await Promise.race([
-          this.anthropic.messages.create({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 1024,
-            messages: [{
-              role: 'user',
-              content: enrichedMessage
-            }],
-            system: this.systemPrompt
-          }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout appel Claude')), 30000)
-          )
-        ]);
+  // Nouvelle méthode helper
+  async retryClaudeCall(enrichedMessage, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        console.log(`🔄 Tentative ${i + 1}/${maxRetries} appel Claude`);
+
+        const response = await this.anthropic.messages.create({
+          model: 'claude-3-haiku-20240307',
+          max_tokens: 1024,
+          messages: [{
+            role: 'user',
+            content: enrichedMessage
+          }],
+          system: this.systemPrompt
+        });
 
         if (!response?.content?.[0]?.text) {
-          console.error('❌ Réponse invalide de Claude:', response);
           throw new Error('Réponse Claude invalide : contenu manquant');
         }
 
-        let responseText = response.content[0].text;
-        console.log('📝 Contenu réponse brute:', responseText);
-
-        try {
-          analysisResult = JSON.parse(responseText);
-          const requiredFields = ['type', 'intention_details'];
-          const missingFields = requiredFields.filter(field => !analysisResult[field]);
-          if (missingFields.length > 0) {
-            throw new Error(`Champs requis manquants: ${missingFields.join(', ')}`);
-          }
-
-          console.log('✅ Analyse complète:', {
-            type: analysisResult.type,
-            details: analysisResult.intention_details,
-            needsContext: analysisResult.contexte_necessaire,
-            needsClarification: analysisResult.clarification_necessaire
-          });
-
-        } catch (parseError) {
-          throw new Error(`Erreur parsing JSON: ${parseError.message}\nRéponse: ${responseText}`);
-        }
+        return response;
 
       } catch (error) {
-        console.error('❌ Erreur détaillée dans analyzeMessage:', {
-          error: {
-            name: error.name,
-            message: error.message,
-            stack: error.stack
-          },
-          context: {
-            requestTimestamp: new Date().toISOString(),
-            userId: userId,
-            messageLength: message.length,
-            hasEnrichedMessage: !!enrichedMessage
-          }
-        });
-
-        return {
-          type: 'ERROR',
-          error: {
-            message: error.message || 'Une erreur est survenue',
-            code: error.name === 'TimeoutError' ? 'TIMEOUT' : 'ANALYSIS_ERROR',
-            details: error.details || null
-          },
-          message: 'Une erreur est survenue lors de l\'analyse du message'
-        };
+        console.error(`❌ Erreur tentative ${i + 1}:`, error);
+        if (i === maxRetries - 1) throw error;
+        await new Promise(r => setTimeout(r, 2000)); // 2s entre les tentatives
       }
-
-      if (analysisResult) {
-        analysisResult.userId = userId;
-        analysisResult.currentContext = context;
-        analysisResult.availableProducts = availableProducts;
-
-        await this.validateAndEnrichAnalysis(analysisResult);
-
-        await contextManager.updateConversationContext(userId, {
-          lastAnalysisResult: analysisResult
-        });
-      }
-
-      return analysisResult;
-
-    } catch (error) {
-      console.error('❌ Erreur dans analyzeContextualMessage:', {
-        error: error,
-        message: error.message,
-        stack: error.stack
-      });
-      throw error;
     }
   }
 
   async validateAndEnrichAnalysis(analysis) {
     try {
       console.log('🔍 Validation analyse:', analysis.type);
+
+      // Si motif de livraison détecté, déléguer à DeliveryAnalyzer
+      if (this.isDeliveryIntent(analysis)) {
+        console.log('📦 Délégation à DeliveryAnalyzer');
+        const deliveryAnalyzer = new DeliveryAnalyzer({
+          clients: analysis.currentContext?.clients,
+          products: analysis.currentContext?.products,
+          lastClient: analysis.currentContext?.lastClient,
+          lastDelivery: analysis.currentContext?.lastDelivery
+        });
+        
+        await deliveryAnalyzer.initialize();
+        return {
+          type: 'DELIVERY',
+          ...await deliveryAnalyzer.analyzeMessage(analysis.message)
+        };
+      }
 
       switch (analysis.type) {
         case 'CLIENT_SELECTION':
@@ -300,6 +215,22 @@ et NON PAS
       console.error('❌ Erreur validation analyse:', error);
       throw error;
     }
+  }
+
+  // Nouvelle méthode helper
+  isDeliveryIntent(analysis) {
+    const isDelivery = analysis.type === 'ACTION_LIVRAISON' ||
+      analysis.intention_details?.type_action === 'CREATION' ||
+      /[0-9]+\s+(?:citron|mangue|fraise|mg)/i.test(analysis.message);
+
+    console.log('🔍 Test pattern livraison:', {
+      message: analysis.message,
+      isDelivery,
+      type: analysis.type,
+      typeAction: analysis.intention_details?.type_action
+    });
+
+    return isDelivery;
   }
 
   async validateClientSelection(analysis) {
@@ -431,12 +362,12 @@ et NON PAS
   }
 
   buildContextualMessage(message, context) {
-    let enrichedMessage = `Message de Nizar: ${message}\n\nContexte actuel:\n`;
-
+    let enrichedMessage = `Message à analyser:\n${message}\n\nContexte actuel:\n`;
+  
     if (context.lastClient) {
       enrichedMessage += `- Dernier client mentionné: ${context.lastClient.Nom_Client} (${context.lastClient.zone || 'pas de zone'})\n`;
     }
-
+  
     if (context.lastDelivery) {
       enrichedMessage += `- Dernière livraison: ${context.lastDelivery.ID_Livraison}\n`;
       enrichedMessage += `- Produits de la dernière livraison:\n`;
@@ -444,21 +375,23 @@ et NON PAS
         enrichedMessage += `  * ${detail.quantite} ${detail.nom_produit}\n`;
       });
     }
-
+  
     if (context.recentProducts?.size > 0) {
       enrichedMessage += `- Produits récemment mentionnés: ${Array.from(context.recentProducts).join(', ')}\n`;
     }
-
+  
     if (context.products) {
-      const productList = Object.values(context.products.byId || {}).map(product => product.Nom_Produit).join(', ');
+      const productList = Object.values(context.products.byId || {})
+        .map(product => product.Nom_Produit)
+        .join(', ');
       enrichedMessage += `- Liste des produits disponibles: ${productList}\n`;
     }
-
+  
     enrichedMessage += `\nMerci d'analyser ce message pour en extraire :
-  - Le client concerné (avec sa zone si possible)
-  - Les produits avec leurs quantités
-  - Le type d'action demandée\n`;
-
+    - La première ligne contient le nom du client
+    - Les lignes suivantes contiennent les quantités de produits
+    - Des suffixes peuvent être présents (5L, 25CL, S) et doivent être traités comme modificateurs\n`;
+  
     console.log('📝 Message enrichi pour Claude:', enrichedMessage);
     return enrichedMessage;
   }

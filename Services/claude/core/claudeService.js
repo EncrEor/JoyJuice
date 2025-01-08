@@ -10,6 +10,7 @@ const clientHandler = require('../handlers/clientHandler');
 const cacheManager = require('./cacheManager/cacheIndex');
 const indexManager = require('./indexManager');
 console.log('IndexManager in claudeService:', indexManager);
+const deliveryHandler = require('../handlers/deliveryHandler');
 
 
 const path = require('path');
@@ -95,51 +96,42 @@ class ClaudeService {
       const context = await contextManager.getConversationContext(userId);
       console.log('📑 Contexte actuel:', context);
 
-      console.log('🔄 Tentative de récupération de l\'instance du cache...');
+      // Enrichir le contexte avec les produits 
       const cacheStore = cacheManager.getCacheStoreInstance();
-      if (!cacheStore) {
-        throw new Error('⚠️ Instance de cacheStore non disponible.');
+      if (cacheStore) {
+        const products = cacheStore.getData('products');
+        if (products?.byId) {
+          context.products = products.byId;
+          console.log(`✅ ${Object.keys(products.byId).length} produits ajoutés au contexte`);
+        }
       }
 
-      console.log('🔍 Récupération des produits depuis le cache...');
-      const products = cacheStore.getData('products');
-      if (!products || typeof products !== 'object' || !products.byId) {
-        console.warn('⚠️ Produits introuvables ou format invalide dans le cache.');
-      } else {
-        console.log(`✅ ${Object.keys(products.byId).length} produits récupérés depuis le cache.`);
-      }
-
-      if (!products || !products.byId) {
-        console.warn('⚠️ Aucun produit trouvé dans le cache.');
-      } else {
-        console.log(`✅ Produits récupérés (${Object.keys(products.byId).length} éléments).`);
-      }
-
-      context.products = products?.byId || {};
-      console.log('📦 Produits ajoutés au contexte.');
-
+      // Analyse initiale
       const analysis = await this.retryRequest(async () => {
         return await intentAnalyzer.analyzeContextualMessage(userId, message, context);
       });
 
-      if (!analysis || typeof analysis !== 'object') {
-        console.error('❌ Analyse échouée ou réponse vide:', analysis);
-        throw new Error('Analyse échouée ou réponse vide');
-      }
+      console.log('🎯 Résultat analyse:', analysis);
 
-      console.log('🎯 Analyse complétée:', analysis);
-
-      const result = await this.executeAction(analysis);
+      // Exécution de l'action
+      const result = await this.executeAction(analysis, context); // Ajout du context
       console.log('✨ Résultat action:', result);
 
+      // Mise à jour du contexte
       await this.updateContext(userId, analysis, result);
 
+      // Génération de la réponse
       const response = await this.generateResponse(analysis, result);
 
       return this.formatFinalResponse(response, context);
 
     } catch (error) {
-      console.error('❌ Erreur dans processMessage:', error.message || error);
+      console.error('❌ Erreur dans processMessage:', {
+        error,
+        message: error.message,
+        stack: error.stack,
+        userId
+      });
       return this.handleError(error);
     }
   }
@@ -232,40 +224,43 @@ class ClaudeService {
       console.log('⚡ Exécution action:', analysis.type);
 
       switch (analysis.type) {
-        
-          case 'DELIVERY': {
-            console.log('📦 Traitement message livraison');
-            
-            // Initialisation des analyseurs
-            const deliveryAnalyzer = new DeliveryAnalyzer(
-              require('../../clientsService'),
-              require('../../produitsService')
-            );
-            await deliveryAnalyzer.initialize();
-            
-            // Analyse du message
-            const deliveryData = await deliveryAnalyzer.analyzeMessage(analysis.message);
-            console.log('✅ Données livraison analysées:', deliveryData);
-            
-            // Traitement de la livraison
-            const processor = new DeliveryProcessor(
-              require('../../livraisonsService'),
-              require('../../produitsService')
-            );
-            await processor.initialize();
-            
-            const result = await processor.processDelivery(deliveryData);
-            console.log('✅ Livraison traitée:', result);
-            
-            return {
-              status: 'SUCCESS',
-              type: 'DELIVERY',
-              data: result
-            };
-          }
 
-        
-        
+        // claudeService.js dans executeAction(), après l'analyse du type DELIVERY
+        case 'DELIVERY': {
+          console.log('📦 Traitement message livraison');
+          return await deliveryHandler.createDelivery(analysis.userId, {
+            clientName: analysis.intention_details.client.nom,
+            zone: analysis.intention_details.client.zone,
+            produits: analysis.intention_details.produits,
+            context: analysis.currentContext // Ajout du contexte
+          });
+
+
+          // Initialisation des analyseurs
+          const deliveryAnalyzer = new DeliveryAnalyzer(contextData);
+          await deliveryAnalyzer.initialize();
+
+          // Analyse du message
+          const deliveryData = await deliveryAnalyzer.analyzeMessage(analysis.message);
+          console.log('✅ Données livraison analysées:', deliveryData);
+
+          // Traitement de la livraison
+          const processor = new DeliveryProcessor(
+            require('../../livraisonsService'),
+            require('../../produitsService')
+          );
+          await processor.initialize();
+
+          const result = await processor.processDelivery(deliveryData);
+          console.log('✅ Livraison traitée:', result);
+
+          return {
+            status: 'SUCCESS',
+            type: 'DELIVERY',
+            data: result
+          };
+        }
+
         case 'CLIENT_SELECTION': {
           if (!analysis.userId) {
             throw new Error('userId manquant pour la sélection client');
@@ -310,56 +305,107 @@ class ClaudeService {
             data: analysis.intention_details
           };
 
-        default:
-          throw ErrorUtils.createError('Type action non supporté', 'UNSUPPORTED_ACTION');
+        default: {
+          const error = ErrorUtils.createError('Type action non supporté', 'UNSUPPORTED_ACTION');
+          console.error('❌ Type action non géré:', {
+            type: analysis.type,
+            error: error
+          });
+          throw error;
+        }
       }
+
     } catch (error) {
-      console.error('❌ Erreur exécution action:', error);
+      // Enhanced error handling
+      console.error('❌ Erreur exécution action:', {
+        type: analysis?.type || 'UNKNOWN',
+        error: {
+          message: error.message,
+          code: error.code,
+          stack: error.stack
+        },
+        context: {
+          userId: analysis?.userId,
+          details: analysis?.intention_details
+        }
+      });
+
+      // Return structured error response
       return {
         status: 'ERROR',
-        message: error.message || 'Erreur lors de l\'exécution de l\'action'
+        code: error.code || 'EXECUTION_ERROR',
+        message: error.message || 'Erreur lors de l\'exécution de l\'action',
+        details: error.details || null
       };
     }
   }
 
   async handleClientSelection(analysis) {
     try {
-      const clientHandler = require('../handlers/clientHandler');
-      console.log('🔄 Délégation sélection client au handler');
+      if (!analysis?.intention_details?.client) {
+        throw new Error('Détails client manquants');
+      }
 
-      return await clientHandler.handleClientSelection(
+      const clientHandler = require('../handlers/clientHandler');
+      console.log('🔄 Délégation sélection client:', {
+        userId: analysis.userId,
+        clientDetails: analysis.intention_details.client
+      });
+
+      const result = await clientHandler.handleClientSelection(
         analysis.intention_details.client,
         analysis.userId
       );
 
+      if (!result?.status) {
+        throw new Error('Résultat sélection client invalide');
+      }
+
+      return result;
+
     } catch (error) {
-      console.error('❌ Erreur handleClientSelection:', error);
-      throw error;
+      console.error('❌ Erreur sélection client:', {
+        error: error.message,
+        stack: error.stack,
+        analysis: analysis
+      });
+
+      return {
+        status: 'ERROR',
+        error: {
+          code: 'CLIENT_SELECTION_ERROR',
+          message: error.message
+        }
+      };
     }
   }
 
   async createLivraison(livraisonData) {
     try {
-      console.log('📦 [ClaudeService] Début création nouvelle livraison:', livraisonData);
+      if (!livraisonData?.userId) {
+        throw new Error('Données livraison invalides');
+      }
 
-      const result = await deliveryHandler.createDelivery(livraisonData.userId, livraisonData);
+      console.log('📦 Création livraison:', livraisonData);
 
-      console.log('✅ [ClaudeService] Livraison créée avec succès:', result);
+      const result = await deliveryHandler.createDelivery(
+        livraisonData.userId,
+        livraisonData
+      );
 
+      if (!result?.status) {
+        throw new Error('Création livraison échouée');
+      }
+
+      console.log('✅ Livraison créée:', result);
       return result;
 
     } catch (error) {
-      console.error('❌ [ClaudeService] Erreur création livraison:', {
-        message: error.message,
-        details: livraisonData,
-        stack: error.stack,
+      console.error('❌ Erreur création livraison:', {
+        error: error.message,
+        data: livraisonData
       });
-
-      return {
-        status: 'ERROR',
-        message: error.message,
-        details: error.details || null,
-      };
+      throw error;
     }
   }
 
@@ -395,11 +441,11 @@ class ClaudeService {
           if (!details.client?.nom) {
             throw ErrorUtils.createError('Client non spécifié', 'MISSING_CLIENT');
           }
-        
+
           // Recherche des zones spécifiquement demandées
           if (details.champs?.includes('zone')) {
             const clientResult = await clientLookupService.findClientByNameAndZone(details.client.nom);
-            
+
             if (clientResult.status === 'multiple') {
               return {
                 status: 'SUCCESS',
@@ -411,7 +457,7 @@ class ClaudeService {
               };
             }
           }
-        
+
           // Recherche info complète client 
           const clientResult = await indexManager.getClientInfo(details.client);
           return clientResult;
@@ -501,37 +547,37 @@ class ClaudeService {
     try {
       console.log('🎯 Génération réponse pour:', { analysis, result });
 
-      if (analysis.type === 'ACTION_LIVRAISON' && 
+      if (analysis.type === 'ACTION_LIVRAISON' &&
         result.status === 'SUCCESS' &&
         result.livraison?.status === 'success') {
 
-      const { livraison_id, total, details } = result.livraison;
-      
-      const clientName = analysis.intention_details.client?.nom;
-      const clientZone = result.livraison.zone || analysis.intention_details.client?.Zone || '?';
-      
-      console.log('🔍 Données pour le message:', {
-        id: livraison_id,
-        client: clientName,
-        zone: clientZone,
-        details: details,
-        total: total
-      });
+        const { livraison_id, total, details } = result.livraison;
 
-      const produitsStr = details.map(d => 
-        `${d.Quantite} ${d.nom || d.ID_Produit}`
-      ).join(', ');
-      
-      const today = new Date();
-      const formattedDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
-      
-      const message = `Bon de livraison ${livraison_id} du ${formattedDate} enregistré pour ${clientName} (${clientZone}) : ${produitsStr} pour un total de ${total} DNT`;
+        const clientName = analysis.intention_details.client?.nom;
+        const clientZone = result.livraison.zone || analysis.intention_details.client?.Zone || '?';
 
-      return {
-        message,
-        suggestions: ['Voir le détail', 'Nouvelle livraison']
-      };
-    }
+        console.log('🔍 Données pour le message:', {
+          id: livraison_id,
+          client: clientName,
+          zone: clientZone,
+          details: details,
+          total: total
+        });
+
+        const produitsStr = details.map(d =>
+          `${d.Quantite} ${d.nom || d.ID_Produit}`
+        ).join(', ');
+
+        const today = new Date();
+        const formattedDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+
+        const message = `Bon de livraison ${livraison_id} du ${formattedDate} enregistré pour ${clientName} (${clientZone}) : ${produitsStr} pour un total de ${total} DNT`;
+
+        return {
+          message,
+          suggestions: ['Voir le détail', 'Nouvelle livraison']
+        };
+      }
 
       const naturalResponse = await naturalResponder.generateResponse(analysis, result);
 
@@ -597,11 +643,11 @@ const initService = async () => {
     return claudeService;
   } catch (error) {
     console.error('❌ Erreur initialisation ClaudeService:', {
-      message: error.message, 
+      message: error.message,
       stack: error.stack
     });
     throw error;
   }
 };
 
-module.exports = initService();
+module.exports = new ClaudeService();

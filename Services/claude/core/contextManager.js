@@ -48,37 +48,34 @@ class ContextManager {
 
   async getConversationContext(userId) {
     try {
-      let context = ContextManager.conversationCache.get(userId);
-
-      if (!context) {
-        console.log(`📝 Création nouveau contexte pour l'utilisateur ${userId}`);
-
-        const products = this.cacheStore.getData('products');
-        console.log('📦 Produits récupérés du cache:', products ? Object.keys(products.byId).length : 0);
-
-        context = {
-          lastClient: null,
-          lastDelivery: null,
-          recentProducts: new Set(),
-          products: products?.byId || {},
-          conversationStart: new Date().toISOString(),
-          lastUpdate: new Date().toISOString()
-        };
-
-        ContextManager.conversationCache.set(userId, context);
-        console.log(`✅ Nouveau contexte créé avec ${Object.keys(context.products).length} produits`);
-      } else {
-        if (!context.products) {
-          const products = this.cacheStore.getData('products');
-          context.products = products?.byId || {};
-          ContextManager.conversationCache.set(userId, context);
-          console.log('📦 Produits ajoutés au contexte existant');
-        }
+      console.log(`🔍 Récupération contexte pour userId: ${userId}`);
+      
+      if (!userId) {
+        throw new Error('userId requis');
       }
 
+      let context = ContextManager.conversationCache.get(userId);
+      
+      if (!context) {
+        console.log(`📝 Création nouveau contexte pour ${userId}`);
+        context = {
+          userId,
+          lastAnalysisResult: null,
+          lastClient: null,
+          createdAt: new Date().toISOString()
+        };
+        ContextManager.conversationCache.set(userId, context);
+      }
+
+      console.log(`✅ Contexte: ${JSON.stringify(context, null, 2)}`);
       return context;
+
     } catch (error) {
-      console.error('❌ Erreur récupération contexte:', error);
+      console.error('❌ Erreur contexte:', {
+        userId,
+        error: error.message,
+        stack: error.stack
+      });
       throw error;
     }
   }

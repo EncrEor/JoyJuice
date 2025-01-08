@@ -33,23 +33,7 @@ app.use(cors({
 }));
 app.use(express.json()); // Parse les requêtes JSON
 
-// ===== 4. MIDDLEWARE DE LOGGING =====
-// Log toutes les requêtes pour le debugging
-app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`, req.body);
-    next();
-});
-
-// ===== 5. CONFIGURATION DES ROUTES =====
-app.use('/api/clients', clientsRouter);
-app.use('/api/produits', produitsRouter);
-app.use('/api/livraisons', livraisonsRouter);
-app.use('/api/commandes', commandesRouter);
-app.use('/api/detailscommandes', detailsCommandesRouter);
-app.use('/api/detailslivraisons', detailsLivraisonsRouter);
-app.use('/api/chat', chatRouter);
-
-// ===== 6. INITIALISATION DU CACHE =====
+// ===== 4. INITIALISATION DU CACHE =====
 async function initializeCache() {
     try {
         console.log('🔄 Initialisation du cache...');
@@ -86,57 +70,41 @@ async function initializeCache() {
     }
 }
 
-// ===== 7. GESTION DES ERREURS GOOGLE SHEETS =====
-// Middleware pour gérer les erreurs d'API Google Sheets
-app.use((err, req, res, next) => {
-    if (err.code === 'ECONNREFUSED') {
-        console.error('❌ Erreur de connexion à Google Sheets:', err);
-        return res.status(503).json({
-            success: false,
-            error: 'Service Google Sheets temporairement indisponible'
+// ===== 5. CONFIGURATION DES ROUTES =====
+async function startServer() {
+    try {
+        // Initialisation du cache AVANT d'enregistrer les routes
+        await initializeCache();
+
+        // Configuration des routes après l'initialisation du cache
+        app.use('/api/clients', clientsRouter);
+        app.use('/api/produits', produitsRouter);
+        app.use('/api/livraisons', livraisonsRouter);
+        app.use('/api/commandes', commandesRouter);
+        app.use('/api/detailscommandes', detailsCommandesRouter);
+        app.use('/api/detailslivraisons', detailsLivraisonsRouter);
+        app.use('/api/chat', chatRouter);
+
+        // Démarrage du serveur après toutes les configurations
+        app.listen(PORT, () => {
+            console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+            console.log('\n📋 Routes disponibles :');
+            console.log('- /api/clients          : Gestion des clients');
+            console.log('- /api/produits         : Gestion des produits');
+            console.log('- /api/livraisons       : Gestion des livraisons');
+            console.log('- /api/commandes        : Gestion des commandes');
+            console.log('- /api/detailscommandes : Détails des commandes');
+            console.log('- /api/detailslivraisons: Détails des livraisons');
+            console.log('- /api/chat             : Interface de chat\n');
         });
+
+    } catch (error) {
+        console.error('❌ Erreur critique lors du démarrage du serveur:', error);
+        process.exit(1); // Arrêt du processus en cas d'erreur
     }
-    
-    if (err.code === 'GOOGLE_SHEETS_API_ERROR') {
-        console.error('❌ Erreur API Google Sheets:', err);
-        return res.status(500).json({
-            success: false,
-            error: 'Erreur lors de l\'accès aux données',
-            details: err.message
-        });
-    }
+}
 
-    // Autres erreurs
-    console.error('❌ Erreur serveur:', err);
-    res.status(500).json({
-        success: false,
-        error: 'Erreur serveur interne'
-    });
-});
-
-// ===== 8. DÉMARRAGE DU SERVEUR =====
-const server = app.listen(PORT, () => {
-    console.log(`🚀 Serveur démarré sur le port ${PORT}`);
-    console.log('\n📋 Routes disponibles :');
-    console.log('- /api/clients          : Gestion des clients');
-    console.log('- /api/produits         : Gestion des produits');
-    console.log('- /api/livraisons       : Gestion des livraisons');
-    console.log('- /api/commandes        : Gestion des commandes');
-    console.log('- /api/detailscommandes : Détails des commandes');
-    console.log('- /api/detailslivraisons: Détails des livraisons');
-    console.log('- /api/chat             : Interface de chat\n');
-
-    (async () => {
-        try {
-            console.log('🔄 Initialisation du cache...');
-            await initializeCache();
-        } catch (error) {
-            console.error('❌ Erreur critique lors de l\'initialisation:', error);
-            server.close(() => {
-                process.exit(1);
-            });
-        }
-    })();
-});
+// ===== 6. LANCEMENT DU SERVEUR =====
+startServer();
 
 module.exports = app;

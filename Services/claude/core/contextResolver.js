@@ -36,23 +36,52 @@ class ContextResolver {
    * @param {Object} analysis - Analyse de l'intention utilisateur
    */
   static async resolveMissingInformation(userId, analysis) {
-    const lastClient = await this.getContextInfo(userId, 'lastClient');
-
-    if (analysis.type === 'CLIENT_SELECTION' && !analysis.intention_details.client?.zone && lastClient?.availableZones) {
-      console.log(`🔍 Résolution automatique: Ajout des zones disponibles pour le client ${lastClient.name}`);
-      analysis.intention_details.client.availableZones = lastClient.availableZones;
-    }
-
-    if (analysis.type === 'DEMANDE_INFO' && analysis.intention_details.type_info === 'LISTE_ZONES') {
-      console.log(`🔍 Résolution automatique: Utilisation du contexte pour les zones disponibles`);
-      return {
+    try {
+      console.log('🔍 Résolution contexte pour:', {userId, type: analysis?.type});
+      
+      const lastClient = await this.getContextInfo(userId, 'lastClient');
+      
+      if (!analysis) {
+        throw new Error('Analysis object required');
+      }
+  
+      // Validate context
+      if (analysis.contexte_necessaire && !lastClient) {
+        return {
+          status: 'ERROR',
+          error: {
+            code: 'MISSING_CONTEXT',
+            message: 'Contexte client manquant'
+          }
+        };
+      }
+  
+      const result = {
         status: 'SUCCESS',
-        message: `Les zones disponibles pour ${lastClient.name} sont : ${lastClient.availableZones.join(', ')}`,
-        availableZones: lastClient.availableZones
+        contextResolved: true,
+        client: lastClient
+      };
+  
+      console.log('✅ Contexte résolu:', result);
+      return result;
+  
+    } catch (error) {
+      console.error('❌ Erreur résolution contexte:', {
+        userId,
+        error: {
+          message: error.message,
+          stack: error.stack
+        }
+      });
+      
+      return {
+        status: 'ERROR',
+        error: {
+          code: 'CONTEXT_ERROR',
+          message: error.message
+        }
       };
     }
-
-    return null; // Aucune résolution automatique applicable
   }
 }
 

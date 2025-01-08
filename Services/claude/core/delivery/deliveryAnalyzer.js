@@ -1,65 +1,75 @@
 // deliveryAnalyzer.js 
+
 const { Anthropic } = require('@anthropic-ai/sdk');
 const juiceFamilies = require('./JuiceFamilies');
 
 class DeliveryAnalyzer {
-  constructor(clientsService, produitsService) {
-    this.clientsService = clientsService;
-    this.produitsService = produitsService;
+  constructor(context) {
+    this.context = context;
+    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     this.systemPrompt = null;
   }
 
   async initialize() {
+    
+    console.log('🧐 Vérification données du cache:', {
+      hasClients: !!this.context.clients,
+      hasProducts: !!this.context.products?.byId,
+      clientsFormat: this.context.clients?.byId ? 'object' : 'array',
+      productsCount: Object.keys(this.context.products?.byId || {}).length
+    });
+
+    if (this.systemPrompt) {
+      console.log('✅ DeliveryAnalyzer déjà initialisé');
+      return;
+    }
+
     console.log('🔄 Initialisation DeliveryAnalyzer...');
 
-    // Initialisation de Anthropic
-    this.anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    // Extraire clients et produits du contexte
+    const clients = this.context.clients || [];
+    const products = this.context.products?.byId ? 
+      Object.values(this.context.products.byId) : [];
 
-    // Récupérer les données de référence
-    const [clients, products] = await Promise.all([
-      this.clientsService.getClientsData(),
-      this.produitsService.getProduitsData()
-    ]);
-
-    // Construction du prompt par sections pour plus de clarté
+    // Construction du prompt
     const referenceTables = this.buildReferenceTables(clients, products);
     const rules = this.buildRules();
     const examples = this.buildExamples();
     const outputFormat = this.buildOutputFormat();
 
-    // Assemblage du prompt final avec sauts de ligne maintenus
     this.systemPrompt = `Tu es l'assistant JoyJuice spécialisé dans l'analyse des messages de livraison et de demandes d'information sur le client.
    
-   ${referenceTables}
-   
-   ${rules}
-   
-   ${examples}
-   
-   ${outputFormat}`;
+    ${referenceTables}
+    ${rules}
+    ${examples}
+    ${outputFormat}`;
 
-    console.log('🔍 Prompt généré avec zones:', this.systemPrompt);
     console.log('✅ DeliveryAnalyzer initialisé');
   }
 
   buildReferenceTables(clients, products) {
+    // Log de vérification
+    console.log('📊 Données cache utilisées:', {
+      clientsCount: clients?.length,
+      productsCount: products?.length,
+      clientSample: clients?.[0],
+      productSample: products?.[0]
+    });
+  
     return `TABLES DE RÉFÉRENCE:
-   
-   1. ABRÉVIATIONS PRODUITS:
-   ${JSON.stringify(juiceFamilies, null, 2)}
-   
-   2. CLIENTS (avec leurs abréviations et contenance par défaut):
-   ${clients.map(c =>
-      `${c.Nom_Client}:
-     - Abréviations: ${Object.entries(c).filter(([k]) => k.startsWith('AB')).map(([, v]) => v).filter(Boolean).join(', ')}
-     - Zone: ${c.zone ? c.zone.trim() : 'N/A'},
-     - Contenance par défaut: ${c.DEFAULT || '1'}`
-    ).join('\n')}
-   
-   3. PRODUITS DISPONIBLES:
-   ${products.map(p =>
-      `${p.ID_Produit}: ${p.Nom_Produit} (${p.Prix_Unitaire} DNT)`
-    ).join('\n')}`;
+     
+    1. ABRÉVIATIONS PRODUITS:
+    ${JSON.stringify(juiceFamilies, null, 2)}
+     
+    2. CLIENTS:
+    ${Array.isArray(clients) ? clients.map(c => 
+      `${c.Nom_Client} - Zone: ${c.zone || 'N/A'}`
+    ).join('\n') : '(Aucun client dans le cache)'}
+     
+    3. PRODUITS:
+    ${Array.isArray(products) ? products.map(p =>
+      `${p.Nom_Produit} (${p.Prix_Unitaire} DNT)`
+    ).join('\n') : '(Aucun produit dans le cache)'}`;
   }
 
   buildRules() {
@@ -203,7 +213,20 @@ Résultat attendu:
 
   async analyzeMessage(message) {
     try {
+
+      console.log('📦 Analyse livraison:', {
+        message,
+        hasContext: !!this.context,
+        hasSystemPrompt: !!this.systemPrompt
+      });
+      
       console.log('📝 Analyse message:', message);
+
+      // Vérifier si client dans le contexte
+      if (this.context.lastClient && !message.includes('\n')) {
+        message = `${this.context.lastClient.Nom_Client}\n${message}`;
+        console.log('📝 Message enrichi avec client du contexte:', message);
+      }
 
       const response = await this.anthropic.messages.create({
         model: 'claude-3-sonnet-20240229',
@@ -216,9 +239,14 @@ Résultat attendu:
         system: `${this.systemPrompt}\n\nIMPORTANT: Ne fais AUCUN texte d'accompagnement. Renvoie uniquement un objet JSON valide sans aucune autre réponse.`
       });
 
-      console.log('🔍 Message envoyé par Telegram:', message);
+      const result = JSON.parse(response.content[0].text);
 
-      return JSON.parse(response.content[0].text);
+      // Enrichir avec données du contexte si nécessaire
+      if (result.client?.name && !result.client.zone && this.context.lastClient?.zone) {
+        result.client.zone = this.context.lastClient.zone;
+      }
+
+      return result;
 
     } catch (error) {
       console.error('❌ Erreur analyse message:', error);

@@ -36,13 +36,25 @@ Règles :
 
 async generateResponse(analysis, result) {
   try {
-    console.log('💬 [generateResponse] Début de la génération de réponse pour:', { analysis, result });
+    console.log('💬 Analyse message:', {
+      type: analysis?.type,
+      status: result?.status,
+      client: result?.client?.Nom_Client
+    });
 
+    // Validate input
+    if (!analysis || !result) {
+      throw new Error('Paramètres invalides');
+    }
+
+    // Handle errors
     if (result.status === 'ERROR') {
-      console.error('❌ Erreur détectée dans le résultat:', result.error);
+      const errorMsg = result.error?.message || 'Erreur technique';
+      console.error('❌ Erreur:', errorMsg);
       return {
-        message: "Il semble y avoir un problème technique. Pouvez-vous reformuler ou essayer plus tard ?",
-        suggestions: ["Réessayer", "Vérifier les informations saisies"]
+        message: `Désolé, je ne peux pas traiter cette demande: ${errorMsg}`,
+        suggestions: ["Réessayer", "Reformuler la demande"],
+        error: true
       };
     }
 
@@ -103,10 +115,14 @@ async generateResponse(analysis, result) {
     };
 
   } catch (error) {
-    console.error('❌ Erreur durant la génération de réponse:', error);
+    console.error('❌ Erreur générale:', {
+      message: error.message,
+      stack: error.stack 
+    });
+    
     return {
-      message: "Une erreur est survenue. Pouvez-vous reformuler ou préciser votre demande ?",
-      suggestions: ["Réessayer", "Vérifier les informations fournies"],
+      message: "Une erreur est survenue, veuillez réessayer.",
+      suggestions: ["Reformuler", "Contacter le support"],
       error: true
     };
   }
