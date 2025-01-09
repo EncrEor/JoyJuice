@@ -34,7 +34,12 @@ class ClaudeService {
         completion: this.config.getSystemPrompt('completion')
       };
       console.log('✅ ClaudeService initialisé avec succès');
-    } catch (error) {
+    } 
+    
+    
+    
+    
+    catch (error) {
       console.error('❌ Erreur dans le constructeur de ClaudeService:', error?.message || 'Erreur inconnue');
       throw error; // Rethrow to handle upstream
     }
@@ -228,12 +233,25 @@ class ClaudeService {
         // claudeService.js dans executeAction(), après l'analyse du type DELIVERY
         case 'DELIVERY': {
           console.log('📦 Traitement message livraison');
-          return await deliveryHandler.createDelivery(analysis.userId, {
-            clientName: analysis.intention_details.client.nom,
-            zone: analysis.intention_details.client.zone,
-            produits: analysis.intention_details.produits,
-            context: analysis.currentContext // Ajout du contexte
-          });
+          
+          // L'analyse vient de deliveryAnalyzer avec ce format:
+          // {type: 'DELIVERY', client: {name, zone}, products: [...]}
+          
+          // Conversion au format attendu par deliveryHandler
+          const deliveryData = {
+            clientName: analysis.client.name,
+            zone: analysis.client.zone,
+            produits: analysis.products.map(p => ({
+              nom: p.ID_Produit,
+              quantite: p.quantite
+            })),
+            context: analysis.currentContext
+          };
+        
+          console.log('📦 Données converties pour création livraison:', deliveryData);
+          
+          return await deliveryHandler.createDelivery(analysis.userId, deliveryData);
+        }
 
 
           // Initialisation des analyseurs
@@ -259,7 +277,7 @@ class ClaudeService {
             type: 'DELIVERY',
             data: result
           };
-        }
+        
 
         case 'CLIENT_SELECTION': {
           if (!analysis.userId) {

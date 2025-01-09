@@ -58,6 +58,19 @@ async generateResponse(analysis, result) {
       };
     }
 
+    // Cas spécifique pour une livraison réussie
+    if (analysis.type === 'DELIVERY' && result.status === 'SUCCESS' && result.livraison?.status === 'success') {
+      const { livraison_id, total } = result.livraison;
+      const clientName = result.livraison.client?.Nom_Client || 'client';
+      const clientZone = result.livraison.client?.Zone || '';
+
+      return {
+        message: `✅ Bon de livraison ${livraison_id} créé pour ${clientName}${clientZone ? ` (${clientZone})` : ''} : ${total} DNT`,
+        suggestions: ['Voir le détail', 'Nouvelle livraison']
+      };
+    }
+
+
     if (analysis.type === 'DEMANDE_INFO' && result.status === 'SUCCESS') {
       console.log('ℹ️ [generateResponse] Demande d\'informations détectée.');
 

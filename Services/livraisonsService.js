@@ -54,7 +54,7 @@ module.exports.generateLivraisonId = async () => {
 
     // 2. Incrémenter et mettre à jour le compteur
     const newId = lastId + 1;
-    
+
     // Mise à jour atomique du compteur
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -149,16 +149,16 @@ module.exports.getLivraisonsData = async () => {
       })
       .filter(delivery => {
         if (!delivery) return false;
-        
+
         // Convertir la date de livraison
         try {
           const [day, month, year] = delivery.Date_Livraison.split('/');
           const deliveryDate = new Date(year, month - 1, day);
-          
+
           // Filtrer par date (3 derniers mois) et statut
-          return deliveryDate >= threeMonthsAgo && 
-                 deliveryDate <= today && 
-                 delivery.Statut_L === 'En cours';
+          return deliveryDate >= threeMonthsAgo &&
+            deliveryDate <= today &&
+            delivery.Statut_L === 'En cours';
         } catch (error) {
           console.error(`❌ Format de date invalide:`, delivery);
           return false;
@@ -177,20 +177,19 @@ module.exports.getLivraisonsData = async () => {
   }
 };
 
-
 // Récupérer les livraisons d'un client pour le mois en cours
 module.exports.getLivraisonsByClientCurrentMonth = async (clientId) => {
   try {
     console.log(`🔍 Début récupération livraisons client ${clientId}`);
-    
+
     const allLivraisons = await this.getLivraisonsData();
     console.log(`📊 Total livraisons récupérées: ${allLivraisons.length}`);
-    
+
     if (!Array.isArray(allLivraisons)) {
       console.error('❌ Format invalide des livraisons:', allLivraisons);
       throw new Error('Format de données invalide');
     }
-    
+
     const clientLivraisons = allLivraisons.filter(livraison => {
       if (!livraison || !livraison.ID_Client) {
         console.warn('⚠️ Livraison invalide détectée:', livraison);
@@ -200,7 +199,7 @@ module.exports.getLivraisonsByClientCurrentMonth = async (clientId) => {
     });
 
     console.log(`✅ ${clientLivraisons.length} livraisons trouvées pour client ${clientId}`);
-    
+
     // Log détaillé des livraisons trouvées
     clientLivraisons.forEach((liv, index) => {
       console.log(`📦 Livraison ${index + 1}:`, {
@@ -269,27 +268,20 @@ module.exports.addLivraison = async (livraisonData) => {
       const formattedDate = livraisonData.date ||
         `${dateNow.getDate().toString().padStart(2, '0')}/${(dateNow.getMonth() + 1).toString().padStart(2, '0')}/${dateNow.getFullYear()}`;
 
-      // 2.c Traitement des produits
-      let totalLivraison = 0;
-      const detailsPromises = livraisonData.produits.map(async (produit) => {
-        const produitInfo = await productLookupService.findProductByName(produit.nom);
-        if (!produitInfo) {
-          throw new Error(`Produit "${produit.nom}" introuvable.`);
-        }
-        const total = produit.quantite * parseFloat(produitInfo.Prix_Unitaire);
-        totalLivraison += total;
+// 2.c Traitement des produits
+let totalLivraison = 0;
+const details = livraisonData.produits.map(produit => {
+  totalLivraison += produit.total;  // On garde cette ligne!
 
-        return {
-          ID_Detail: `${newLivraisonId}-${produitInfo.ID_Produit}`,
-          ID_Livraison: newLivraisonId,
-          ID_Produit: produitInfo.ID_Produit,
-          Quantite: produit.quantite,
-          Prix_Unit: produitInfo.Prix_Unitaire,
-          Total_Ligne: total
-        };
-      });
-
-      const details = await Promise.all(detailsPromises);
+  return {
+    ID_Detail: `${newLivraisonId}-${produit.id}`,  // produit.id au lieu de produitInfo.ID_Produit
+    ID_Livraison: newLivraisonId,
+    ID_Produit: produit.id,         // produit.id au lieu de produitInfo.ID_Produit
+    Quantite: produit.quantite.toString(),
+    Prix_Unit: produit.prix_unitaire.toString(), // produit.prix_unitaire au lieu de produitInfo.Prix_Unitaire
+    Total_Ligne: produit.total.toString()    // produit.total au lieu de total
+  };
+});
 
       // 2.d Création du tableau pour Google Sheets
       const livraisonRow = [
@@ -390,27 +382,22 @@ module.exports.updateLivraison = async (id, livraisonData) => {
         throw new Error(`Livraison ${id} non trouvée`);
       }
 
-      // 2. Traitement des produits
+      // 2.c Traitement des produits sans nouvelle recherche
       let totalLivraison = 0;
-      const detailsPromises = livraisonData.produits.map(async (produit) => {
-        const produitInfo = await productLookupService.findProductByName(produit.nom);
-        if (!produitInfo) {
-          throw new Error(`Produit "${produit.nom}" introuvable.`);
-        }
-        const total = produit.quantite * parseFloat(produitInfo.Prix_Unitaire);
-        totalLivraison += total;
+      const details = livraisonData.produits.map(produit => {
+        totalLivraison += produit.total; // Utilise le total déjà calculé
 
         return {
-          ID_Detail: `${id}-${produitInfo.ID_Produit}`,
-          ID_Livraison: id,
-          ID_Produit: produitInfo.ID_Produit,
+          ID_Detail: `${newLivraisonId}-${produit.id}`,
+          ID_Livraison: newLivraisonId,
+          ID_Produit: produit.id,
           Quantite: produit.quantite,
-          Prix_Unit: produitInfo.Prix_Unitaire,
-          Total_Ligne: total
+          Prix_Unit: produit.prix_unitaire,
+          Total_Ligne: produit.total
         };
       });
 
-      const details = await Promise.all(detailsPromises);
+      console.log('Ajout des détails de livraison:', details);
 
       // 3. Mise à jour de la livraison
       const dateNow = new Date();
@@ -643,7 +630,7 @@ module.exports.convertIntentionToLivraisonData = async (intentionDetails) => {
       if (!nomProduit.includes('L')) {
         nomProduit = `${nomProduit} ${produit.unite || '1L'}`;
       }
-      
+
       // Vérifier l'existence du produit
       const produitInfo = await productLookupService.findProductByName(nomProduit);
       if (!produitInfo) {
