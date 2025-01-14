@@ -30,8 +30,8 @@ const CACHE_CONFIG = {
         },
         DELIVERIES: {
             isStatic: false,          // Données dynamiques
-            refreshInterval: 5 * 60 * 1000,  // Rafraîchissement toutes les 5 minutes
-            TTL: 15 * 60,             // TTL de 15 minutes
+            refreshInterval: 120 * 60 * 1000,  // Rafraîchissement toutes les 120 minutes
+            TTL: 120 * 60,             // TTL de 120 minutes
             invalidationEvents: [
                 'DELIVERY_ADDED',
                 'DELIVERY_UPDATED',

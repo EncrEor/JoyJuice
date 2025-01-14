@@ -36,8 +36,10 @@ app.use(express.json()); // Parse les requêtes JSON
 // ===== 4. INITIALISATION DU CACHE =====
 async function initializeCache() {
     try {
-        console.log('🔄 Initialisation du cache...');
+        console.log('🔄 (server) Initialisation du cache...');
+        console.log('🔍 (server) Avant CacheManager.init()');
         const cacheManager = await CacheManager.init();
+        console.log('✅ (server) Après CacheManager.init()');
         
         if (!cacheManager) {
             throw new Error('Échec d\'initialisation du CacheManager');

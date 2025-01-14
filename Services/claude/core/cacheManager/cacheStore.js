@@ -82,7 +82,7 @@ class CacheStore {
  */
 getData(key) {
     try {
-        console.log(`📖 Lecture de ${key} dans le cache`);
+        console.log(`📖 (CacheStore) Lecture de ${key} dans le cache`);
         const data = this.dataCache.get(key);
         
         if (data === undefined) {
@@ -92,9 +92,9 @@ getData(key) {
 
         // Log du type et de la taille des données trouvées
         if (data?.byId) {
-            console.log(`✅ Données trouvées pour ${key}: ${Object.keys(data.byId).length} éléments`);
+            console.log(`✅ (cacheStore) Données trouvées pour ${key}: ${Object.keys(data.byId).length} éléments`);
         } else {
-            console.log(`✅ Données trouvées pour ${key}:`, typeof data);
+            console.log(`✅ (cacheStore) Données trouvées pour ${key}:`, typeof data);
         }
         
         return data;
@@ -115,14 +115,14 @@ getData(key) {
  * @returns {boolean} Succès de l'opération
  */
 setData(key, value, ttl = undefined) {
-    console.log(`📝 Mise en cache pour ${key} :`, value);
+    console.log(`📝 (cacheStore) Mise en cache pour ${key} :`, value);
     try {
         if (value === undefined || value === null) {
             console.warn(`⚠️ Tentative d'écriture de données nulles/undefined pour ${key}`);
             return false;
         }
 
-        console.log(`📝 Écriture de ${key} dans le cache`);
+        console.log(`📝 (cacheStore) Écriture de ${key} dans le cache`);
         
         // Vérification de la structure des données
         if (typeof value === 'object' && !Array.isArray(value)) {

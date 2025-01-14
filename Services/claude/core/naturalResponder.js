@@ -36,10 +36,10 @@ Règles :
 
 async generateResponse(analysis, result) {
   try {
-    console.log('💬 Analyse message:', {
+    console.log('💬 [naturalResponder] Analyse message:', {
       type: analysis?.type,
       status: result?.status,
-      client: result?.client?.Nom_Client
+      client: result?.client?.name
     });
 
     // Validate input
@@ -50,7 +50,7 @@ async generateResponse(analysis, result) {
     // Handle errors
     if (result.status === 'ERROR') {
       const errorMsg = result.error?.message || 'Erreur technique';
-      console.error('❌ Erreur:', errorMsg);
+      console.error('❌ [naturalResponder] Erreur:', errorMsg);
       return {
         message: `Désolé, je ne peux pas traiter cette demande: ${errorMsg}`,
         suggestions: ["Réessayer", "Reformuler la demande"],
@@ -58,14 +58,18 @@ async generateResponse(analysis, result) {
       };
     }
 
+    //console.log('📥 [naturalResponder] Données reçues:', {analysis, result});
+
     // Cas spécifique pour une livraison réussie
     if (analysis.type === 'DELIVERY' && result.status === 'SUCCESS' && result.livraison?.status === 'success') {
       const { livraison_id, total } = result.livraison;
-      const clientName = result.livraison.client?.Nom_Client || 'client';
-      const clientZone = result.livraison.client?.Zone || '';
-
+      if (!analysis.client?.name && !result.client?.name && !result.livraison?.client?.name) {
+        console.warn('⚠️ [naturalResponder] Aucune info client trouvée');
+      }
+      const clientName = analysis.client?.name || result.client?.name || result.livraison?.client?.name || 'client';
+      const clientZone = analysis.client?.zone || result.client?.zone || result.livraison?.client?.zone || '';
       return {
-        message: `✅ Bon de livraison ${livraison_id} créé pour ${clientName}${clientZone ? ` (${clientZone})` : ''} : ${total} DNT`,
+        message: `✅ [naturalResponder] Bon de livraison ${livraison_id} créé pour ${clientName}${clientZone ? ` (${clientZone})` : ''} : ${total} DNT`,
         suggestions: ['Voir le détail', 'Nouvelle livraison']
       };
     }
@@ -103,7 +107,7 @@ async generateResponse(analysis, result) {
       };
     }
 
-    console.log('📝 Passage au modèle Claude pour un traitement plus libre.');
+    console.log('📝 [naturalResponder] Passage au modèle Claude pour un traitement plus libre.');
     const prompt = this.buildPromptFromResults(analysis, result);
 
     const response = await this.anthropic.messages.create({
@@ -117,11 +121,11 @@ async generateResponse(analysis, result) {
     });
 
     if (!response?.content?.[0]?.text) {
-      console.error('❌ Réponse invalide de Claude.');
+      console.error('❌ [naturalResponder] Réponse invalide de Claude.');
       throw new Error('Réponse invalide.');
     }
 
-    console.log('✅ Réponse générée avec succès :', response.content[0].text);
+    console.log('✅ [naturalResponder] Réponse générée avec succès :', response.content[0].text);
     return {
       message: response.content[0].text,
       suggestions: []

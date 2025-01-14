@@ -94,76 +94,77 @@ class ClientHandler {
 
   async validateAndEnrichClient(clientInfo) {
     try {
-      console.log('🔍 Validation et enrichissement client:', clientInfo);
-
-      // 1. Validation complète des données avec ValidationUtils
-      if (!ValidationUtils.validateClient(clientInfo)) {
-        console.warn('❌ Validation échouée:', clientInfo);
+      console.log('🔍 Début validation et enrichissement client:', clientInfo);
+  
+      // Validation préliminaire
+      if (!clientInfo || typeof clientInfo !== 'object') {
         throw ErrorUtils.createError('Données client invalides', 'CLIENT_VALIDATION_ERROR');
       }
-
-      // 2. Normalisation du nom pour la recherche
-      const normalizedName = StringUtils.normalizeString(clientInfo.nom);
-      if (!normalizedName) {
-        throw ErrorUtils.createError('Nom du client invalide après normalisation', 'INVALID_CLIENT_NAME');
-      }
-
-      // 3. Utilisation du resolver centralisé
-      const resolverResult = await contextManager.resolveClientWithZone(
-        normalizedName,
+  
+      // Log de toutes les propriétés reçues
+      console.log('📋 Propriétés client reçues:', {
+        nom: clientInfo.nom || clientInfo.name,
+        zone: clientInfo.zone,
+        id: clientInfo.id
+      });
+  
+      // Appel au service avec le nom complet
+      const clientResult = await clientLookupService.findClientByNameAndZone(
+        clientInfo.nom || clientInfo.name,
         clientInfo.zone
       );
-
-      console.log('📋 Résultat résolution:', resolverResult);
-
-      // 4. Traitement du résultat selon le statut
-      switch (resolverResult.status) {
-        case 'SUCCESS': {
-          // Validation supplémentaire des données enrichies
-          const enrichedClient = resolverResult.client;
-          if (!enrichedClient.ID_Client || !enrichedClient.Nom_Client) {
-            throw ErrorUtils.createError(
-              'Données client incomplètes après enrichissement',
-              'INVALID_ENRICHED_DATA'
-            );
-          }
-
-          return {
-            status: 'SUCCESS',
-            client: enrichedClient
-          };
-        }
-
-        case 'NEED_ZONE':
-          return {
-            status: 'NEED_ZONE',
-            message: resolverResult.message,
-            matches: resolverResult.matches,
-            availableZones: resolverResult.availableZones,
-            originalName: clientInfo.nom // Garder le nom original pour le contexte
-          };
-
-        case 'NOT_FOUND':
-          throw ErrorUtils.createError(
-            resolverResult.message,
-            'CLIENT_NOT_FOUND',
-            { searchedName: clientInfo.nom, searchedZone: clientInfo.zone }
-          );
-
-        default:
-          throw ErrorUtils.createError(
-            'Erreur lors de la résolution du client',
-            'CLIENT_RESOLUTION_ERROR'
-          );
+  
+      // Log du résultat détaillé
+      console.log('📋 Résultat lookup service:', {
+        status: clientResult?.status,
+        client: clientResult?.client,
+        raw: clientResult
+      });
+  
+      // Si client trouvé avec succès
+      if (clientResult?.status === 'success' && clientResult.client) {
+        const enrichedClient = {
+          ID_Client: clientResult.client.ID_Client,
+          Nom_Client: clientResult.client.Nom_Client,
+          DEFAULT: clientResult.client.DEFAULT,
+          Zone: clientInfo.zone || clientResult.client.zone
+        };
+        console.log('✅ Client enrichi:', enrichedClient);
+        
+        return {
+          status: 'SUCCESS',
+          client: enrichedClient
+        };
       }
-
+  
+      // Si besoin de zone
+      if (clientResult?.status === 'multiple') {
+        return {
+          status: 'NEED_ZONE',
+          message: clientResult.message,
+          matches: clientResult.matches,
+          availableZones: clientResult.zones
+        };
+      }
+  
+      // Autres cas (erreur)
+      throw new Error(clientResult?.message || 'Client non trouvé');
+  
     } catch (error) {
-      console.error('❌ Erreur validation client:', error, {
+      console.error('❌ Erreur validation client:', {
+        message: error.message,
+        code: error.code,
         clientInfo,
-        errorDetails: error.details || {},
         stack: error.stack
       });
-      return ErrorUtils.handleClientError(error);
+      
+      return {
+        status: 'ERROR',
+        error: {
+          message: error.message || 'Erreur validation client',
+          code: error.code || 'VALIDATION_ERROR'
+        }
+      };
     }
   }
 

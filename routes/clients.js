@@ -232,7 +232,7 @@ const COLUMNS = {
 // Récupérer tous les clients
 module.exports.getClientsData = async () => {
   try {
-    console.log('Récupération des données clients...');
+    console.log('(clients) Récupération des données clients...');
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: 'Clients!A1:O1000',

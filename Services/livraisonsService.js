@@ -216,8 +216,9 @@ module.exports.getLivraisonsByClientCurrentMonth = async (clientId) => {
     throw new Error(`Erreur récupération livraisons client: ${error.message}`);
   }
 };
-
+// ***
 // Ajouter une nouvelle livraison
+// ***
 module.exports.addLivraison = async (livraisonData) => {
   try {
     console.log('Début du traitement de la nouvelle livraison:', livraisonData);
@@ -231,25 +232,11 @@ module.exports.addLivraison = async (livraisonData) => {
 
     // 2. Traitement selon le format
     if (isNewFormat) {
-      // 2.a Recherche du client
-      const client = await clientLookupService.findClientByNameAndZone(
-        livraisonData.clientName,
-        livraisonData.zone
-      );
-
-      if (!client) {
-        throw new Error(`Client "${livraisonData.clientName}" introuvable.`);
-      }
-      if (client.multiple) {
-        return {
-          status: 'need_zone',
-          message: `Plusieurs clients trouvés avec le nom "${livraisonData.clientName}". Précisez la zone parmi: ${client.matches.map(c => c.Zone).join(', ')}`,
-          matches: client.matches
-        };
-      }
 
       // 2.b Génération de l'ID et vérification d'unicité
       const newLivraisonId = await this.generateLivraisonId();
+
+
       // Vérification que l'ID n'existe pas déjà
       const existingLivraisons = await sheets.spreadsheets.values.get({
         spreadsheetId,
@@ -268,20 +255,41 @@ module.exports.addLivraison = async (livraisonData) => {
       const formattedDate = livraisonData.date ||
         `${dateNow.getDate().toString().padStart(2, '0')}/${(dateNow.getMonth() + 1).toString().padStart(2, '0')}/${dateNow.getFullYear()}`;
 
-// 2.c Traitement des produits
-let totalLivraison = 0;
-const details = livraisonData.produits.map(produit => {
-  totalLivraison += produit.total;  // On garde cette ligne!
+        console.log('💰 Données produits avant calcul total:', {
+          produits: livraisonData.produits,
+          premierProduit: livraisonData.produits[0]
+        });
 
-  return {
-    ID_Detail: `${newLivraisonId}-${produit.id}`,  // produit.id au lieu de produitInfo.ID_Produit
-    ID_Livraison: newLivraisonId,
-    ID_Produit: produit.id,         // produit.id au lieu de produitInfo.ID_Produit
-    Quantite: produit.quantite.toString(),
-    Prix_Unit: produit.prix_unitaire.toString(), // produit.prix_unitaire au lieu de produitInfo.Prix_Unitaire
-    Total_Ligne: produit.total.toString()    // produit.total au lieu de total
-  };
-});
+      // 2.c Traitement des produits
+      let totalLivraison = 0;
+      const details = livraisonData.produits.map(produit => {
+        totalLivraison += produit.total;  // On garde cette ligne!
+
+        return {
+          ID_Detail: `${newLivraisonId}-${produit.id}`,  // produit.id au lieu de produitInfo.ID_Produit
+          ID_Livraison: newLivraisonId,
+          ID_Produit: produit.id,         // produit.id au lieu de produitInfo.ID_Produit
+          Quantite: produit.quantite.toString(),
+          Prix_Unit: produit.prix_unitaire.toString(), // produit.prix_unitaire au lieu de produitInfo.Prix_Unitaire
+          Total_Ligne: produit.total.toString()    // produit.total au lieu de total
+        };
+      });
+
+      console.log('📋 Variables pour livraisonRow:', {
+        newLivraisonId,
+        formattedDate,
+        clientId: livraisonData.clientId,
+        totalLivraison: totalLivraison ? totalLivraison.toString() : 'undefined',
+        etape: 'Avant création livraisonRow'
+      });
+//LOG DOUBLON PEUT ETRE
+      console.log('🔍 Variables disponibles:', {
+        newLivraisonId,
+        formattedDate,
+        clientId: livraisonData.clientId,
+        totalLivraison
+      });
+// FIN DE LOG DOUBLON PEUT ETRE
 
       // 2.d Création du tableau pour Google Sheets
       const livraisonRow = [
@@ -525,84 +533,47 @@ module.exports.deleteLivraison = async (id) => {
 // Validation des données de la livraison
 module.exports.validateLivraisonData = (livraisonData) => {
   try {
-    console.log("🔍 Validation des données de livraison:", livraisonData);
+    console.log("🔍 [livraisonsService] Validation données:", livraisonData);
 
-    // Détection du format de données
-    const isNewFormat = typeof livraisonData === 'object' && 'clientName' in livraisonData;
-    console.log('📝 Format détecté:', isNewFormat ? 'nouveau' : 'ancien');
+    // Validation structure
+    if (!livraisonData) {
+      console.error("❌ [livraisonsService] Données nulles ou undefined");
+      return false;
+    }
+
+    const isNewFormat = 'clientName' in livraisonData;
+    console.log('📝 Format:', isNewFormat ? 'nouveau' : 'ancien');
 
     if (isNewFormat) {
-      // Validation du nouveau format (clientName + produits)
-      if (!livraisonData.clientName) {
-        throw new Error('Nom du client requis');
+      // Validation du nouveau format
+      if (!livraisonData.clientName || !livraisonData.clientId) {
+        console.error("❌ [livraisonsService] Client invalide");
+        return false;
       }
 
-      if (!Array.isArray(livraisonData.produits) || livraisonData.produits.length === 0) {
-        throw new Error('Liste de produits requise et ne peut pas être vide');
+      if (!livraisonData.produits?.length) {
+        console.error("❌ [livraisonsService] Produits manquants");
+        return false;
       }
 
-      // Vérification de chaque produit
-      livraisonData.produits.forEach((produit, index) => {
-        if (!produit.nom) {
-          throw new Error(`Nom du produit manquant à l'index ${index}`);
-        }
-        if (typeof produit.quantite !== 'number' || produit.quantite <= 0) {
-          throw new Error(`Quantité invalide pour le produit ${produit.nom}`);
-        }
-      });
+      // Validation produits
+      const produitsValides = livraisonData.produits.every(p => 
+        p.id && p.quantite && p.quantite > 0
+      );
 
-      // Vérification de la date si fournie
-      if (livraisonData.date) {
-        if (!FORMAT_DATE_REGEX.test(livraisonData.date)) {
-          throw new Error(`Format de date invalide. Utilisez ${FORMAT_DATE_EXEMPLE}`);
-        }
+      if (!produitsValides) {
+        console.error("❌ [livraisonsService] Données produits invalides");
+        return false;
       }
 
-      console.log('✅ Validation réussie pour le nouveau format');
-      return true;
-    } else {
-      // Validation de l'ancien format array
-      if (!Array.isArray(livraisonData)) {
-        throw new Error('Format de données invalide (tableau attendu)');
-      }
-
-      if (livraisonData.length !== 5) {
-        throw new Error(`Nombre d'éléments incorrect. Attendu: 5, Reçu: ${livraisonData.length}`);
-      }
-
-      // Validation des champs obligatoires
-      const [id, date, clientId, total, statut] = livraisonData;
-
-      if (!id) {
-        throw new Error('ID de livraison requis');
-      }
-
-      if (!date) {
-        throw new Error('Date de livraison requise');
-      }
-
-      if (!FORMAT_DATE_REGEX.test(date)) {
-        throw new Error(`Format de date invalide. Utilisez ${FORMAT_DATE_EXEMPLE}`);
-      }
-
-      if (!clientId) {
-        throw new Error('ID client requis');
-      }
-
-      if (total !== undefined && total !== null && isNaN(parseFloat(total))) {
-        throw new Error('Le total doit être un nombre');
-      }
-
-      if (!STATUTS_VALIDES.includes(statut)) {
-        throw new Error('Statut invalide');
-      }
-
-      console.log('✅ Validation réussie pour l\'ancien format');
+      console.log("✅ [livraisonsService] Validation réussie");
       return true;
     }
+
+    return false;
   } catch (error) {
-    console.error('❌ Erreur de validation:', error.message);
-    throw error;
+    console.error("❌ [livraisonsService] Erreur validation:", error.message);
+    return false; 
   }
 };
 

@@ -65,14 +65,14 @@ class IntentionAnalyzer {
 
   async analyzeContextualMessage(userId, message) {
     try {
-      console.log('📥 Analyse message:', { userId, message: message.slice(0, 100) });
+      console.log('📥 [intentAnalyzer] Analyse message:', { userId, message: message.slice(0, 100) });
       
       if (!userId || !message?.trim()) {
         throw ErrorUtils.createError('Paramètres invalides', 'INVALID_PARAMS');
       }
   
       const context = await contextManager.getConversationContext(userId);
-      console.log('📑 Contexte récupéré:', {
+      console.log('📑 [intentAnalyzer] Contexte récupéré:', {
         hasLastClient: !!context?.lastClient,
         hasLastAnalysis: !!context?.lastAnalysisResult
       });
@@ -93,7 +93,7 @@ class IntentionAnalyzer {
   
       // Détection du type
       const messageType = this.detectMessageType(message);
-      console.log('🎯 Type détecté:', messageType);
+      console.log('🎯 [intentAnalyzer] Type détecté:', messageType);
   
       // Traitement selon type
       switch(messageType) {
@@ -114,7 +114,7 @@ class IntentionAnalyzer {
       }
   
     } catch (error) {
-      console.error('❌ Erreur analyse:', error);
+      console.error('❌ [intentAnalyzer] Erreur analyse:', error);
       return {
         type: 'ERROR',
         error: { code: error.code || 'ANALYSIS_ERROR', message: error.message }
@@ -153,13 +153,13 @@ class IntentionAnalyzer {
         });
 
         if (!response?.content?.[0]?.text) {
-          throw new Error('Réponse Claude invalide : contenu manquant');
+          throw new Error('[intentAnalyzer] Réponse Claude invalide : contenu manquant');
         }
 
         return response;
 
       } catch (error) {
-        console.error(`❌ Erreur tentative ${i + 1}:`, error);
+        console.error(`❌ [intentAnalyzer] Erreur tentative ${i + 1}:`, error);
         if (i === maxRetries - 1) throw error;
         await new Promise(r => setTimeout(r, 2000)); // 2s entre les tentatives
       }
@@ -168,11 +168,11 @@ class IntentionAnalyzer {
 
   async validateAndEnrichAnalysis(analysis) {
     try {
-      console.log('🔍 Validation analyse:', analysis.type);
+      console.log('🔍 [intentAnalyzer] Validation analyse:', analysis.type);
 
       // Si motif de livraison détecté, déléguer à DeliveryAnalyzer
       if (this.isDeliveryIntent(analysis)) {
-        console.log('📦 Délégation à DeliveryAnalyzer');
+        console.log('📦 [intentAnalyzer] Délégation à DeliveryAnalyzer');
         const deliveryAnalyzer = new DeliveryAnalyzer({
           clients: analysis.currentContext?.clients,
           products: analysis.currentContext?.products,
@@ -192,10 +192,6 @@ class IntentionAnalyzer {
           await this.validateClientSelection(analysis);
           break;
 
-        case 'ACTION_LIVRAISON':
-          await this.validateLivraisonAction(analysis);
-          break;
-
         case 'DEMANDE_INFO':
           await this.validateInfoRequest(analysis);
           break;
@@ -208,35 +204,32 @@ class IntentionAnalyzer {
           console.log('⚠️ Type d\'analyse non reconnu:', analysis.type);
       }
 
-      console.log('✅ Validation terminée');
+      console.log('✅ [intentAnalyzer] Validation terminée');
       return analysis;
 
     } catch (error) {
-      console.error('❌ Erreur validation analyse:', error);
+      console.error('❌ [intentAnalyzer] Erreur validation analyse:', error);
       throw error;
     }
   }
 
-  // Nouvelle méthode helper
   isDeliveryIntent(analysis) {
-    const isDelivery = analysis.type === 'ACTION_LIVRAISON' ||
-      analysis.intention_details?.type_action === 'CREATION' ||
+    const isDelivery = analysis.type === 'DELIVERY' ||  
       /[0-9]+\s+(?:citron|mangue|fraise|mg)/i.test(analysis.message);
-
+  
     console.log('🔍 Test pattern livraison:', {
       message: analysis.message,
       isDelivery,
-      type: analysis.type,
-      typeAction: analysis.intention_details?.type_action
+      type: analysis.type
     });
-
+  
     return isDelivery;
   }
 
   async validateClientSelection(analysis) {
     try {
       const details = analysis.intention_details;
-      console.log('🔍 Analyse sélection client:', details);
+      console.log('🔍 [intentAnalyzer] Analyse sélection client:', details);
 
       if (!details?.client?.nom) {
         console.log('❌ Pas de client spécifié dans l\'intention');
@@ -250,7 +243,7 @@ class IntentionAnalyzer {
         details.client.zone
       );
 
-      console.log('🔍 Résultat recherche client:', clientResult);
+      console.log('🔍 [intentAnalyzer] Résultat recherche client:', clientResult);
 
       switch (clientResult.status) {
         case 'success': {
@@ -279,7 +272,7 @@ class IntentionAnalyzer {
         }
 
         case 'error': {
-          console.error('❌ Erreur technique:', clientResult.message);
+          console.error('❌ [intentAnalyzer] Erreur technique:', clientResult.message);
           analysis.clarification_necessaire = true;
           analysis.message = 'Une erreur est survenue lors de la recherche.';
           break;
@@ -287,48 +280,15 @@ class IntentionAnalyzer {
       }
 
     } catch (error) {
-      console.error('❌ Erreur validation client:', error);
+      console.error('❌ [intentAnalyzer] Erreur validation client:', error);
       analysis.clarification_necessaire = true;
       analysis.message = 'Erreur lors de la validation.';
     }
   }
 
-  async validateLivraisonAction(analysis) {
-    const details = analysis.intention_details;
-    console.log('🔍 Validation action livraison:', details);
-
-    if (!details.client) {
-      if (analysis.currentContext?.lastClient) {
-        details.client = {
-          nom: analysis.currentContext.lastClient.Nom_Client,
-          zone: analysis.currentContext.lastClient.zone,
-          implicite: true
-        };
-      } else {
-        analysis.clarification_necessaire = true;
-        analysis.raison_clarification = 'client_manquant';
-        return;
-      }
-    }
-
-    if (!details.produits || !Array.isArray(details.produits) || !details.produits.length) {
-      analysis.clarification_necessaire = true;
-      analysis.raison_clarification = 'produits_manquants';
-      return;
-    }
-
-    for (const produit of details.produits) {
-      if (!produit.nom || !produit.quantite || produit.quantite <= 0) {
-        analysis.clarification_necessaire = true;
-        analysis.raison_clarification = 'details_produit_manquants';
-        return;
-      }
-    }
-  }
-
   validateInfoRequest(analysis) {
     const details = analysis.intention_details;
-    console.log('🔍 Validation demande info:', details);
+    console.log('🔍 [intentAnalyzer] Validation demande info:', details);
 
     if (!details.type_info) {
       analysis.clarification_necessaire = true;
@@ -352,7 +312,7 @@ class IntentionAnalyzer {
 
   validateConversation(analysis) {
     const details = analysis.intention_details;
-    console.log('🔍 Validation conversation:', details);
+    console.log('🔍 [intentAnalyzer] Validation conversation:', details);
 
     if (!details.sous_type) {
       details.sous_type = 'DISCUSSION';
@@ -392,7 +352,7 @@ class IntentionAnalyzer {
     - Les lignes suivantes contiennent les quantités de produits
     - Des suffixes peuvent être présents (5L, 25CL, S) et doivent être traités comme modificateurs\n`;
   
-    console.log('📝 Message enrichi pour Claude:', enrichedMessage);
+    console.log('📝 [intentAnalyzer] Message enrichi pour Claude:', enrichedMessage);
     return enrichedMessage;
   }
 

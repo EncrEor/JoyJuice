@@ -29,11 +29,11 @@ class IndexManager {
 
     async initialize() {
         try {
-            console.log('📊 Initialisation des index...');
+            console.log('📊 [indexManager] Initialisation des index...');
             // Attendre l'initialisation du CacheManager
             await cacheManager.init();
             await this.refreshIndexes();
-            console.log('✅ Index initialisés avec succès');
+            console.log('✅ [indexManager] Index initialisés avec succès');
         } catch (error) {
             console.error('❌ Erreur initialisation des index:', error);
             throw error;
@@ -42,15 +42,15 @@ class IndexManager {
 
     async refreshIndexes(retryCount = 0, maxRetries = 3) {
         try {
-            console.log(`🔄 Tentative de rafraîchissement des index (essai ${retryCount + 1}/${maxRetries + 1})`);
+            console.log(`🔄 [indexManager] Tentative de rafraîchissement des index (essai ${retryCount + 1}/${maxRetries + 1})`);
             
             // Récupérer l'instance du CacheManager et accéder au store
             const cache = cacheManager.getInstance();
-            console.log('📦 CacheManager récupéré:', !!cache);
+            console.log('📦 [indexManager] CacheManager récupéré:', !!cache);
             
             const cacheStore = cache.cacheStore;
             if (!cacheStore) {
-                console.warn('⚠️ CacheStore non disponible');
+                console.warn('⚠️ [indexManager] CacheStore non disponible');
                 if (retryCount < maxRetries) {
                     const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
                     console.log(`⏳ Nouvelle tentative dans ${delay}ms...`);
@@ -61,7 +61,7 @@ class IndexManager {
             }
     
             // Récupération des données avec logs
-            console.log('📥 Récupération des données du cache...');
+            console.log('📥 [indexManager] Récupération des données du cache...');
             const clients = cacheStore.getData('clients');
             const deliveries = cacheStore.getData('deliveries');
     
@@ -83,21 +83,21 @@ class IndexManager {
             // Construction des index avec logs
             console.log('🏗️ Construction des index...');
             
-            console.log('📊 Construction index zone/produit...');
+            console.log('📊 [indexManager] Construction index zone/produit...');
             this.buildZoneProductIndex(clients.byId ? Object.values(clients.byId) : []);
             
-            console.log('📊 Construction index créneaux horaires...');
+            console.log('📊 [indexManager] Construction index créneaux horaires...');
             this.buildTimeSlotIndex(clients.byId ? Object.values(clients.byId) : []);
             
-            console.log('📊 Construction index fréquence...');
+            console.log('📊 [indexManager] Construction index fréquence...');
             this.buildFrequencyIndex(deliveries.byId ? Object.values(deliveries.byId) : []);
             
-            console.log('📊 Construction index routes...');
+            console.log('📊 [indexManager] Construction index routes...');
             this.buildRouteIndex(clients.byId ? Object.values(clients.byId) : []);
     
-            console.log('✅ Index mis à jour avec succès');
+            console.log('✅ [indexManager] Index mis à jour avec succès');
         } catch (error) {
-            console.error('❌ Erreur rafraîchissement des index:', error);
+            console.error('❌ [indexManager] Erreur rafraîchissement des index:', error);
             throw error;
         }
     }
@@ -216,7 +216,7 @@ class IndexManager {
 
     async getClientInfo(clientData) {
         try {
-            console.log('🔍 Recherche client:', clientData);
+            console.log('🔍 [indexManager] Recherche client:', clientData);
     
             // Recherche via clientLookupService
             const result = await clientLookupService.findClientByNameAndZone(
@@ -228,7 +228,7 @@ class IndexManager {
             return result;
     
         } catch (error) {
-            console.error('❌ Erreur recherche client:', error);
+            console.error('❌ [indexManager] Erreur recherche client:', error);
             return {
                 status: 'error',
                 message: error.message
@@ -275,7 +275,7 @@ class IndexManager {
                 stats: stats
             };
         } catch (error) {
-            console.error('Erreur calcul fréquence produit:', error);
+            console.error('[indexManager] Erreur calcul fréquence produit:', error);
             return {
                 frequency: 'unknown',
                 stats: {
@@ -337,7 +337,7 @@ class IndexManager {
         try {
             return await clientsService.getClientsData();
         } catch (error) {
-            console.error('Erreur lors de la récupération des clients:', error);
+            console.error('[indexManager] Erreur lors de la récupération des clients:', error);
             return [];
         }
     }
@@ -346,7 +346,7 @@ class IndexManager {
         try {
             return await livraisonsService.getLivraisonsDataCurrentMonth();
         } catch (error) {
-            console.error('Erreur lors de la récupération des livraisons:', error);
+            console.error('[indexManager] Erreur lors de la récupération des livraisons:', error);
             return [];
         }
     }

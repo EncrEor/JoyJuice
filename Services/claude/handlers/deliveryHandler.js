@@ -11,83 +11,71 @@ class DeliveryHandler {
     // Add initialization
   }
 
-  async createDelivery(userId, deliveryData) {
-    try {
-      console.log('📦 [DeliveryHandler] Début création livraison:', deliveryData);
+// Dans deliveryHandler.js
+async createDelivery(userId, deliveryData) {
+  try {
+    console.log('📦 [DeliveryHandler] Début création livraison:', deliveryData);
 
-      // Étape 1 : Validation des données
-      console.log('🔍 [DeliveryHandler] Validation des données...');
-      const errors = ValidationUtils.validateLivraisonData(deliveryData);
-      if (errors.length) {
-        console.error('❌ [DeliveryHandler] Erreurs de validation:', errors);
-        throw ErrorUtils.createError('Données livraison invalides', 'INVALID_DATA', errors);
-      }
-      console.log('✅ [DeliveryHandler] Validation réussie.');
-
-      // Étape 2 : Enrichissement des données client
-      console.log('🔍 [DeliveryHandler] Validation et enrichissement du client...');
-      const clientResult = await clientHandler.validateAndEnrichClient({
-        nom: deliveryData.clientName,
-        zone: deliveryData.zone,
-      });
-
-      if (clientResult.status === 'NEED_ZONE') {
-        console.warn('⚠️ [DeliveryHandler] Client ambigu, zone nécessaire:', clientResult);
-        return clientResult;
-      }
-
-      if (clientResult.status !== 'SUCCESS') {
-        console.error('❌ [DeliveryHandler] Client invalide:', clientResult);
-        throw ErrorUtils.createError('Client invalide', 'INVALID_CLIENT');
-      }
-      console.log('✅ [DeliveryHandler] Client validé et enrichi:', clientResult.client);
-
-      // Étape 3 : Calcul du solde actuel
-      console.log('💰 [DeliveryHandler] Calcul du solde actuel...');
-      const soldeActuel = await this.calculateClientBalance(clientResult.client.ID_Client);
-
-      // Étape 4 : Validation et enrichissement des produits
-      console.log('🔍 [DeliveryHandler] Validation et enrichissement des produits...');
-      const normalizedProducts = await this.validateAndEnrichProducts(deliveryData.produits);
-      console.log('✅ [DeliveryHandler] Produits validés et enrichis:', normalizedProducts);
-
-      // Étape 5 : Calcul du total de la livraison
-      console.log('💰 [DeliveryHandler] Calcul du total de la livraison...');
-      const totalLivraison = this.calculateTotal(normalizedProducts);
-      console.log('✅ [DeliveryHandler] Total de la livraison:', totalLivraison);
-
-      // Étape 6 : Préparation des données de livraison
-      console.log('📋 [DeliveryHandler] Préparation des données pour enregistrement...');
-      const livraisonData = {
-        clientName: clientResult.client.Nom_Client,
-        clientId: clientResult.client.ID_Client, // Ajout de l'ID client
-        zone: clientResult.client.Zone, // Utiliser la bonne propriété 'Zone'
-        produits: normalizedProducts,
-        date: DateUtils.formatDateForDelivery(deliveryData.date)
-      };
-
-      // Étape 7 : Enregistrement de la livraison
-      console.log('💾 [DeliveryHandler] Enregistrement de la livraison dans le service...');
-      const result = await livraisonsService.addLivraison(livraisonData);
-      console.log('✅ [DeliveryHandler] Livraison enregistrée avec succès:', result);
-
-      // Étape 8 : Mise à jour du contexte utilisateur
-      console.log('🔄 [DeliveryHandler] Mise à jour du contexte utilisateur...');
-      await clientHandler.updateClientContext(userId, clientResult.client);
-
-      return {
-        status: 'SUCCESS',
-        livraison: result,
-      };
-    } catch (error) {
-      console.error('❌ [DeliveryHandler] Erreur dans createDelivery:', {
-        message: error.message,
-        details: deliveryData,
-        stack: error.stack,
-      });
-      return ErrorUtils.handleLivraisonError(error);
+    // Enrichissement des produits
+    const cacheStore = require('../core/cacheManager/cacheStore');
+    const productsCache = cacheStore.getData('products');
+    
+    if (!productsCache?.byId) {
+      throw new Error('Cache produits non disponible');
     }
+
+    // Enrichissement des produits
+    const enrichedProducts = deliveryData.produits.map(produit => {
+      const productInfo = productsCache.byId[produit.id];
+      if (!productInfo) {
+        throw new Error(`Produit ${produit.id} non trouvé dans le cache`);
+      }
+      
+      return {
+        id: produit.id,
+        nom: productInfo.Nom_Produit,
+        quantite: produit.quantite,
+        prix_unitaire: productInfo.Prix_Unitaire,
+        total: produit.quantite * productInfo.Prix_Unitaire
+      };
+    });
+
+    const livraisonData = {
+      clientName: deliveryData.clientName,
+      clientId: deliveryData.clientId,
+      zone: deliveryData.zone,
+      DEFAULT: deliveryData.DEFAULT,
+      produits: enrichedProducts,
+      date: DateUtils.formatDateForDelivery()
+    };
+
+    console.log('💾 [DeliveryHandler] Données enrichies pour création:', livraisonData);
+
+    // Validation
+    if (!livraisonsService.validateLivraisonData(livraisonData)) {
+      throw new Error('Validation des données échouée');
+    }
+
+    // Enregistrement
+    const result = await livraisonsService.addLivraison(livraisonData);
+    return {
+      status: 'SUCCESS',
+      client: {
+        name: deliveryData.clientName,
+        zone: deliveryData.zone,
+        id: deliveryData.clientId
+      },
+      livraison: result
+    };
+
+  } catch (error) {
+    console.error('❌ [DeliveryHandler] Erreur:', error.message);
+    return {
+      status: 'ERROR',
+      error: error.message
+    };
   }
+}
 
   async validateAndEnrichProducts(products) {
     if (!Array.isArray(products)) {

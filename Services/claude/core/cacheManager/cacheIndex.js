@@ -25,7 +25,7 @@ class CacheManager {
 
         // Obtenir l'instance de cacheStore
         this.cacheStore = require('./cacheStore');
-        console.log('🔄 CacheManager: Instance de cacheStore obtenue');
+        console.log('🔄 [cacheIndex] CacheManager: Instance de cacheStore obtenue');
 
         CacheManager.instance = this;
     }
@@ -33,7 +33,7 @@ class CacheManager {
     // Méthode pour accéder au cacheStore
     getCacheStore() {
         if (!this.cacheStore) {
-            console.error('❌ CacheStore non initialisé dans CacheManager');
+            console.error('❌ [cacheIndex] CacheStore non initialisé dans CacheManager');
             return null;
         }
         return this.cacheStore;
@@ -61,35 +61,65 @@ class CacheManager {
 
     async initialize() {
         try {
-            console.log('🚀 Initialisation du CacheManager...');
-
-            // Validation de la configuration et des services
-            await this.validateConfig();
-            await this.validateServices();
-
+            console.log('🚀 [cacheIndex] Initialisation du CacheManager...');
+    
+            // Validation de la configuration
+            console.log('🔄 [cacheIndex] Début validateConfig()');
+            try {
+                await this.validateConfig();
+                console.log('✅ [cacheIndex] Fin validateConfig()');
+            } catch (configError) {
+                console.error('❌ [cacheIndex] Erreur dans validateConfig():', configError.message, configError.stack);
+                throw configError; // Propager l'erreur
+            }
+    
+            // Validation des services
+            console.log('🔄 [cacheIndex] Début validateServices()');
+            try {
+                await this.validateServices();
+                console.log('✅ [cacheIndex] Fin validateServices()');
+            } catch (serviceError) {
+                console.error('❌ [cacheIndex] Erreur dans validateServices():', serviceError.message, serviceError.stack);
+                throw serviceError; // Propager l'erreur
+            }
+    
             // Initialisation des données
-            await this.initializeCache();
-
+            console.log('🔄 [cacheIndex] Début initializeCache()');
+            try {
+                await this.initializeCache();
+                console.log('✅ [cacheIndex] Fin initializeCache()');
+            } catch (cacheError) {
+                console.error('❌ [cacheIndex] Erreur dans initializeCache():', cacheError.message, cacheError.stack);
+                throw cacheError; // Propager l'erreur
+            }
+    
             // Configuration des rafraîchissements automatiques
-            this.setupAutoRefresh();
-
-            console.log('✅ CacheManager initialisé avec succès');
+            console.log('🔄 [cacheIndex] Début setupAutoRefresh()');
+            try {
+                this.setupAutoRefresh();
+                console.log('✅ [cacheIndex] Fin setupAutoRefresh()');
+            } catch (autoRefreshError) {
+                console.error('❌ [cacheIndex] Erreur dans setupAutoRefresh():', autoRefreshError.message, autoRefreshError.stack);
+                throw autoRefreshError; // Propager l'erreur
+            }
+    
+            console.log('✅ [cacheIndex] CacheManager initialisé avec succès');
         } catch (error) {
-            console.error('❌ Erreur initialisation CacheManager:', {
+            console.error('❌ [cacheIndex] Erreur critique dans initialize():', {
                 message: error.message,
                 stack: error.stack,
                 name: error.name
             });
-            throw error;
+            throw error; // Propager l'erreur pour gestion ultérieure
         }
     }
 
     validateConfig() {
-        console.log('🔍 Validation de la configuration...');
+        console.log('🔍 [cacheIndex] Validation de la configuration...');
         if (!CACHE_CONFIG.TYPES) {
             throw new Error('Configuration invalide: TYPES manquant');
         }
-        console.log('✅ Configuration validée');
+        console.log('✅ [cacheIndex] Configuration validée');
     }
 
     /**
@@ -103,16 +133,16 @@ class CacheManager {
         try {
             // Vérifier si le cache est déjà en cours d'initialisation
             if (this.isInitializing) {
-                console.log('⏳ Initialisation déjà en cours, attente...');
+                console.log('⏳ [cacheIndex] Initialisation déjà en cours, attente...');
                 return;
             }
             this.isInitializing = true;
 
-            console.log('🔄 Initialisation du cache...');
+            console.log('🔄 [cacheIndex] Initialisation du cache...');
 
             // 1. CLIENTS
             try {
-                console.log('🔍 Récupération des clients...');
+                console.log('🔍 [cacheIndex] Récupération des clients...');
                 const clients = await clientsService.getClientsData();
 
                 // Validation des données clients
@@ -123,7 +153,7 @@ class CacheManager {
                 // Optimisation et mise en cache
                 const optimizedClients = CacheUtils.optimizeClientsForSearch(clients);
                 cacheStore.setData('clients', optimizedClients);
-                console.log(`✅ Clients mis en cache: ${clients.length}`);
+                console.log(`✅ [cacheIndex] Clients mis en cache: ${clients.length}`);
             } catch (clientError) {
                 console.error('❌ Erreur initialisation clients:', clientError);
                 throw new Error(`Échec initialisation clients: ${clientError.message}`);
@@ -131,7 +161,7 @@ class CacheManager {
 
             // 2. PRODUITS
             try {
-                console.log('🔍 Récupération des produits...');
+                console.log('🔍 [cacheIndex] Récupération des produits...');
                 const products = await produitsService.getProduitsData();
 
                 // Validation des données produits
@@ -142,7 +172,7 @@ class CacheManager {
                 // Optimisation et mise en cache
                 const optimizedProducts = CacheUtils.optimizeProductsForSearch(products);
                 cacheStore.setData('products', optimizedProducts);
-                console.log(`✅ Produits mis en cache: ${products.length}`);
+                console.log(`✅ [cacheIndex] Produits mis en cache: ${products.length}`);
             } catch (productError) {
                 console.error('❌ Erreur initialisation produits:', productError);
                 throw new Error(`Échec initialisation produits: ${productError.message}`);
@@ -150,12 +180,12 @@ class CacheManager {
 
             // 3. LIVRAISONS
             try {
-                console.log('🔍 Récupération des livraisons...');
+                console.log('🔍 [cacheIndex] Récupération des livraisons...');
                 const deliveries = await this.fetchDeliveries();
 
                 // Validation explicite du format des livraisons
                 if (!Array.isArray(deliveries)) {
-                    console.error('❌ Format livraisons invalide:', typeof deliveries);
+                    console.error('❌ [cacheIndex] Format livraisons invalide:', typeof deliveries);
                     throw new Error('Format de données livraisons invalide');
                 }
 
@@ -163,9 +193,9 @@ class CacheManager {
                 const optimizedDeliveries = CacheUtils.optimizeLivraisonsForSearch(deliveries || []);
                 cacheStore.setData('deliveries', optimizedDeliveries);
                 // Vérification de l'intégrité après la mise en cache
-                console.log('🔍 Vérification de l\'intégrité du cache des livraisons...');
+                console.log('🔍 [cacheIndex] Vérification de l\'intégrité du cache des livraisons...');
                 const integrityResult = await this.verifyCacheIntegrity('deliveries');
-                console.log('✅ Résultat vérification intégrité:', {
+                console.log('✅ [cacheIndex] Résultat vérification intégrité:', {
                     success: integrityResult,
                     cacheSize: optimizedDeliveries?.byId ? Object.keys(optimizedDeliveries.byId).length : 0
                 });
@@ -173,7 +203,7 @@ class CacheManager {
 
                 // Log approprié selon le résultat
                 if (deliveries.length > 0) {
-                    console.log(`✅ Livraisons mises en cache: ${deliveries.length}`);
+                    console.log(`✅ [cacheIndex] Livraisons mises en cache: ${deliveries.length}`);
                 } else {
                     console.warn('⚠️ Aucune livraison active trouvée pour la période');
                 }
@@ -192,15 +222,15 @@ class CacheManager {
                     products: cacheStore.getData('products')?.byId ? Object.keys(cacheStore.getData('products').byId).length : 0,
                     deliveries: cacheStore.getData('deliveries')?.byId ? Object.keys(cacheStore.getData('deliveries').byId).length : 0
                 };
-                console.log('📊 État final du cache:', cacheState);
-                console.log('✅ Cache initialisé avec succès');
+                console.log('📊 [cacheIndex] État final du cache:', cacheState);
+                console.log('✅ [cacheIndex] Cache initialisé avec succès');
             } catch (verifyError) {
-                console.error('❌ Erreur vérification état du cache:', verifyError);
+                console.error('❌ [cacheIndex] Erreur vérification état du cache:', verifyError);
                 throw verifyError;
             }
 
         } catch (error) {
-            console.error('❌ Erreur critique initialisation cache:', {
+            console.error('❌ [cacheIndex] Erreur critique initialisation cache:', {
                 message: error.message,
                 stack: error.stack,
                 type: error.name
@@ -228,7 +258,7 @@ class CacheManager {
     setupAutoRefresh() {
         const deliveryConfig = CACHE_CONFIG.TYPES.DELIVERIES;
         if (deliveryConfig.refreshInterval) {
-            console.log(`⏰ Configuration du rafraîchissement automatique des livraisons (${deliveryConfig.refreshInterval}ms)`);
+            console.log(`⏰ [cacheIndex] Configuration du rafraîchissement automatique des livraisons (${deliveryConfig.refreshInterval}ms)`);
             setInterval(async () => {
                 try {
                     console.log('🔄 Rafraîchissement des livraisons...');
@@ -237,29 +267,28 @@ class CacheManager {
                     cacheStore.setData('deliveries', CacheUtils.optimizeLivraisonsForSearch(deliveries));
                     await eventManager.emit('afterRefresh', { type: 'deliveries', count: deliveries?.length || 0 });
                 } catch (error) {
-                    console.error('❌ Erreur rafraîchissement livraisons:', error);
+                    console.error('❌ [cacheIndex] Erreur rafraîchissement livraisons:', error);
                     await eventManager.emit('error', { type: 'deliveries', error });
                 }
             }, deliveryConfig.refreshInterval);
         }
     }
 
-    // Récupération des livraisons
-// Récupération des livraisons
+    // Récupération des livraisonss
 async fetchDeliveries() {
     try {
-        console.log('🔍 Début fetchDeliveries');
-        console.log('📦 Cache actuel:', cacheStore.getData('deliveries'));
+        console.log('🔍 [cacheIndex] Début fetchDeliveries');
+        console.log('📦 [cacheIndex] Cache actuel:', cacheStore.getData('deliveries'));
 
         const { start, end, formatDate } = DateUtils.getDateRange(3);
         const formattedStartDate = formatDate(start);
         const formattedEndDate = formatDate(end);
 
-        console.log('🔍 Récupération des livraisons...');
+        console.log('🔍 [cacheIndex] Récupération des livraisons...');
         let allDeliveries = await livraisonsService.getLivraisonsData();
 
         // Log du format des données reçues
-        console.log('📄 Format des livraisons reçues:', {
+        console.log('📄 [cacheIndex] Format des livraisons reçues:', {
             isArray: Array.isArray(allDeliveries),
             length: allDeliveries?.length,
             sample: allDeliveries?.[0],
@@ -267,12 +296,12 @@ async fetchDeliveries() {
         });
 
         if (!allDeliveries) {
-            console.error('❌ Aucune donnée de livraison reçue');
+            console.error('❌ [cacheIndex] Aucune donnée de livraison reçue');
             return [];
         }
 
         if (!Array.isArray(allDeliveries)) {
-            console.error('❌ Format invalide des livraisons reçues:', typeof allDeliveries);
+            console.error('❌ [cacheIndex] Format invalide des livraisons reçues:', typeof allDeliveries);
             return [];
         }
 
@@ -292,10 +321,10 @@ async fetchDeliveries() {
         if (filteredDeliveries.length > 0) {
             console.log(`✅ ${filteredDeliveries.length} livraisons "En cours" récupérées (3 derniers mois)`);
         } else {
-            console.log('ℹ️ Aucune livraison trouvée pour la période');
+            console.log('ℹ️ [cacheIndex] Aucune livraison trouvée pour la période');
         }
 
-        console.log('✅ Données filtrées:', filteredDeliveries);
+        console.log('✅ [cacheIndex] Données filtrées:', filteredDeliveries);
         // Ajout du log de diagnostic
         console.log('🔍 fetchDeliveries retourne:', {
             filteredCount: filteredDeliveries.length,
@@ -305,13 +334,13 @@ async fetchDeliveries() {
         return filteredDeliveries;
 
     } catch (error) {
-        console.error('❌ Erreur critique dans fetchDeliveries:', error);
+        console.error('❌ [cacheIndex] Erreur critique dans fetchDeliveries:', error);
         return [];
     }
 }
 
     async validateServices() {
-        console.log('🔍 Validation des services...');
+        console.log('🔍 [cacheIndex] Validation des services...');
 
         const services = {
             clients: clientsService,
@@ -330,9 +359,9 @@ async fetchDeliveries() {
 
 async verifyCacheIntegrity(type) {
     try {
-        console.log(`🔍 Début vérification intégrité pour ${type}`);
+        console.log(`🔍 [cacheIndex] Début vérification intégrité pour ${type}`);
         const cache = cacheStore.getData(type);
-        console.log(`📊 Données en cache pour ${type}:`, {
+        console.log(`📊 [cacheIndex] Données en cache pour ${type}:`, {
             hasData: !!cache,
             structure: cache ? Object.keys(cache) : [],
             size: cache?.byId ? Object.keys(cache.byId).length : 0
@@ -341,14 +370,14 @@ async verifyCacheIntegrity(type) {
         const issues = CacheUtils.verifyCacheIntegrity(cache, type);
         
         if (issues.length > 0) {
-            console.error(`❌ Problèmes d'intégrité détectés pour ${type}:`, issues);
+            console.error(`❌ [cacheIndex] Problèmes d'intégrité détectés pour ${type}:`, issues);
             return false;
         }
 
-        console.log(`✅ Intégrité vérifiée pour ${type}`);
+        console.log(`✅ [cacheIndex] Intégrité vérifiée pour ${type}`);
         return true;
     } catch (error) {
-        console.error(`❌ Erreur vérification intégrité ${type}:`, error);
+        console.error(`❌ [cacheIndex] Erreur vérification intégrité ${type}:`, error);
         return false;
     }
 }

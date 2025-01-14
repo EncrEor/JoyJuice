@@ -17,7 +17,7 @@ class ContextManager {
   constructor() {
     if (!ContextManager.instance) {
       this.cacheStore = require('./cacheManager/cacheStore');
-      console.log('🔄 ContextManager: Instance de cacheStore obtenue');
+      console.log('🔄 [contextManager] ContextManager: Instance de cacheStore obtenue');
       ContextManager.instance = this;
     }
     return ContextManager.instance;
@@ -25,10 +25,10 @@ class ContextManager {
 
   async initialize() {
     try {
-      console.log('🚀 Initialisation du ContextManager...');
+      console.log('🚀 [contextManager] Initialisation du ContextManager...');
 
       if (!this.cacheStore) {
-        throw new Error('CacheStore non disponible pour ContextManager');
+        throw new Error('[contextManager] CacheStore non disponible pour ContextManager');
       }
 
       if (!ContextManager.conversationCache) {
@@ -36,19 +36,19 @@ class ContextManager {
           stdTTL: 30 * 60,
           checkperiod: 60
         });
-        console.log('✅ Cache de conversation initialisé');
+        console.log('✅ [contextManager] Cache de conversation initialisé');
       }
 
-      console.log('✅ ContextManager initialisé');
+      console.log('✅ [contextManager] ContextManager initialisé');
     } catch (error) {
-      console.error('❌ Erreur initialisation ContextManager:', error);
+      console.error('❌ [contextManager] Erreur initialisation ContextManager:', error);
       throw error;
     }
   }
 
   async getConversationContext(userId) {
     try {
-      console.log(`🔍 Récupération contexte pour userId: ${userId}`);
+      console.log(`🔍 [contextManager] Récupération contexte pour userId: ${userId}`);
       
       if (!userId) {
         throw new Error('userId requis');
@@ -57,7 +57,7 @@ class ContextManager {
       let context = ContextManager.conversationCache.get(userId);
       
       if (!context) {
-        console.log(`📝 Création nouveau contexte pour ${userId}`);
+        console.log(`📝 [contextManager] Création nouveau contexte pour ${userId}`);
         context = {
           userId,
           lastAnalysisResult: null,
@@ -67,11 +67,11 @@ class ContextManager {
         ContextManager.conversationCache.set(userId, context);
       }
 
-      console.log(`✅ Contexte: ${JSON.stringify(context, null, 2)}`);
+      console.log(`✅ [contextManager] Contexte: ${JSON.stringify(context, null, 2)}`);
       return context;
 
     } catch (error) {
-      console.error('❌ Erreur contexte:', {
+      console.error('❌ [contextManager] Erreur contexte:', {
         userId,
         error: error.message,
         stack: error.stack
@@ -82,73 +82,77 @@ class ContextManager {
 
   async updateConversationContext(userId, updates) {
     try {
-      console.log('🔄 Mise à jour du contexte utilisateur:', { userId, updates });
-
+      console.log('🔄 [contextManager] Mise à jour contexte:', { userId, updates });
+   
       const currentContext = await this.getConversationContext(userId);
-
+   
+      if (updates.lastClient) {
+        // Normalisation des données client
+        const clientInfo = {
+          name: updates.lastClient.name || updates.lastClient.Nom_Client,
+          zone: updates.lastClient.zone || updates.lastClient.Zone,
+          id: updates.lastClient.id || updates.lastClient.ID_Client,
+          availableZones: updates.lastClient.availableZones || []
+        };
+   
+        console.log('👤 [contextManager] MAJ client:', {
+          ancien: currentContext.lastClient?.name,
+          nouveau: clientInfo.name,
+          zone: clientInfo.zone
+        });
+   
+        updates.lastClient = clientInfo;
+        updates.clientHistory = [
+          ...(currentContext.clientHistory || []),
+          {
+            id: clientInfo.id,
+            nom: clientInfo.name,
+            zone: clientInfo.zone,
+            timestamp: new Date().toISOString()
+          }
+        ].slice(-5);
+      }
+   
       const updatedContext = {
         ...currentContext,
         ...updates,
         lastUpdate: new Date().toISOString()
       };
-
-      if (updates.lastClient) {
-        console.log('👤 Mise à jour du dernier client sélectionné:', {
-          ancien: currentContext.lastClient?.Nom_Client,
-          nouveau: updates.lastClient?.Nom_Client,
-          zone: updates.lastClient?.Zone
-        });
-
-        updatedContext.clientHistory = [
-          ...(currentContext.clientHistory || []),
-          {
-            id: updates.lastClient.ID_Client,
-            nom: updates.lastClient.Nom_Client,
-            zone: updates.lastClient.Zone,
-            timestamp: new Date().toISOString()
-          }
-        ].slice(-5);
-      }
-
+   
       if (updates.conversationState) {
-        console.log('💬 Mise à jour de l\'état de la conversation:', {
-          ancien: currentContext.conversationState,
-          nouveau: updates.conversationState
-        });
-
         updatedContext.previousState = currentContext.conversationState;
         updatedContext.conversationState = updates.conversationState;
       }
-
+   
       ContextManager.conversationCache.set(userId, updatedContext);
-      console.log('✅ Contexte utilisateur mis à jour avec succès:', updatedContext);
-
+      console.log('✅ [contextManager] Contexte mis à jour:', updatedContext);
+   
       return updatedContext;
-
+   
     } catch (error) {
-      console.error('❌ Erreur lors de la mise à jour du contexte:', error);
+      console.error('❌ [contextManager] Erreur MAJ contexte:', error);
       throw error;
     }
-  }
+   }
 
   async resolveClientWithZone(clientName, zone = null) {
     try {
       if (!clientName) {
-        throw new Error('Nom du client requis');
+        throw new Error('[contextManager] Nom du client requis');
       }
 
-      console.log(`🔍 Résolution client "${clientName}"${zone ? ` (zone: ${zone})` : ''}`);
+      console.log(`🔍 [contextManager] Résolution client "${clientName}"${zone ? ` (zone: ${zone})` : ''}`);
 
       const result = await clientLookupService.findClientByNameAndZone(
         clientName,
         zone
       );
 
-      console.log('📋 Résultat recherche:', result);
+      console.log('📋 [contextManager] Résultat recherche:', result);
 
       switch (result.status) {
         case 'success': {
-          console.log('✅ Client unique trouvé:', result.client);
+          console.log('✅ [contextManager] Client unique trouvé:', result.client);
 
           await this.updateClientCache(result.client);
 
@@ -160,7 +164,7 @@ class ContextManager {
         }
 
         case 'multiple': {
-          console.log('⚠️ Plusieurs clients possibles:', result.matches);
+          console.log('⚠️ [contextManager] Plusieurs clients possibles:', result.matches);
 
           const zones = result.matches
             .map(m => m.Zone)
@@ -176,7 +180,7 @@ class ContextManager {
         }
 
         case 'not_found': {
-          console.log('❌ Client non trouvé');
+          console.log('❌ [contextManager] Client non trouvé');
           return {
             status: 'NOT_FOUND',
             message: `Client "${clientName}" introuvable${zone ? ` dans la zone ${zone}` : ''}`,
@@ -186,13 +190,13 @@ class ContextManager {
         }
 
         default: {
-          console.error('❌ Status non géré:', result.status);
+          console.error('❌ [contextManager] Status non géré:', result.status);
           throw new Error('Résultat de recherche invalide');
         }
       }
 
     } catch (error) {
-      console.error('❌ Erreur résolution client:', error);
+      console.error('❌ [contextManager] Erreur résolution client:', error);
       throw new Error(`Erreur lors de la résolution du client: ${error.message}`);
     }
   }
@@ -204,7 +208,7 @@ class ContextManager {
     clients.byId[client.ID_Client] = client;
     this.cacheStore.setData('clients', clients);
 
-    console.log(`✅ Cache mis à jour pour le client: ${client.ID_Client}`);
+    console.log(`✅ [contextManager] Cache mis à jour pour le client: ${client.ID_Client}`);
   }
 
   static getCacheStatus() {
@@ -214,9 +218,9 @@ class ContextManager {
   async clearUserContext(userId) {
     try {
       ContextManager.conversationCache.del(userId);
-      console.log(`🧹 Contexte nettoyé pour l'utilisateur ${userId}`);
+      console.log(`🧹 [contextManager] Contexte nettoyé pour l'utilisateur ${userId}`);
     } catch (error) {
-      console.error('❌ Erreur nettoyage contexte:', error);
+      console.error('❌ [contextManager] Erreur nettoyage contexte:', error);
       throw error;
     }
   }

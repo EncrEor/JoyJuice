@@ -43,6 +43,7 @@ class ProduitsService {
 
 async getProduitsData() {
   try {
+    console.log('🔍 (produitsService) Récupération des données produits...');
     const values = await googleSheets.getValue(this.sheetRange);
     if (!values || values.length <= 1) return []; // Tenir compte de l'en-tête
 
@@ -51,13 +52,13 @@ async getProduitsData() {
       rowIndex: index + 2, // +2 pour tenir compte de l'en-tête et de l'indexation commençant à 0
       ID_Produit: row[COLUMNS.ID_PRODUIT],
       Nom_Produit: row[COLUMNS.NOM_PRODUIT],
-      Prix_Unitaire: parseFloat(row[COLUMNS.PRIX_UNITAIRE]),
+      Prix_Unitaire: parseFloat((row[COLUMNS.PRIX_UNITAIRE] || '0').toString().replace(',', '.')) || 0,
       Contenance: row[COLUMNS.CONTENANCE],
       Quantite_Stock: parseInt(row[COLUMNS.QUANTITE_STOCK], 10)
     }));
   } catch (error) {
-    console.error('Erreur lors de la récupération des produits:', error);
-    throw new Error('Erreur lors de la récupération des produits');
+    console.error('(produitsService) Erreur lors de la récupération des produits:', error);
+    throw new Error('(produitsService)Erreur lors de la récupération des produits');
   }
 }
 

@@ -94,7 +94,7 @@ async function generateClientId() {
 // Récupérer tous les clients
 module.exports.getClientsData = async () => {
   try {
-    console.log('🔍 Récupération des données clients...');
+    console.log('🔍 (clientsService) Récupération des données clients...');
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: spreadsheetId,
       range: 'Clients!A1:O1000',
@@ -106,7 +106,7 @@ module.exports.getClientsData = async () => {
     }
 
     const clients = result.data.values;
-    console.log('📋 Données clients récupérées :', clients);
+    console.log('📋 (clientsService) Données clients récupérées :', clients);
     
     const formattedClients = clients.slice(1).map(client => arrayToClientObject(client));
     console.log(`✅ Nombre de clients récupérés : ${formattedClients.length}`);

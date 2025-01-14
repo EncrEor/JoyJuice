@@ -2,6 +2,7 @@
 
 const { Anthropic } = require('@anthropic-ai/sdk');
 const juiceFamilies = require('./JuiceFamilies');
+const clientLookupService = require('../../../../Services/clientLookupService');
 
 class DeliveryAnalyzer {
   constructor(context) {
@@ -11,7 +12,7 @@ class DeliveryAnalyzer {
   }
 
   async initialize() {
-    
+
     console.log('🧐 Vérification données du cache:', {
       hasClients: !!this.context.clients,
       hasProducts: !!this.context.products?.byId,
@@ -24,11 +25,11 @@ class DeliveryAnalyzer {
       return;
     }
 
-    console.log('🔄 Initialisation DeliveryAnalyzer...');
+    console.log('🔄 (deliveryAnalyzer)Initialisation DeliveryAnalyzer...');
 
     // Extraire clients et produits du contexte
     const clients = this.context.clients || [];
-    const products = this.context.products?.byId ? 
+    const products = this.context.products?.byId ?
       Object.values(this.context.products.byId) : [];
 
     // Construction du prompt
@@ -44,25 +45,25 @@ class DeliveryAnalyzer {
     ${examples}
     ${outputFormat}`;
 
-    console.log('✅ DeliveryAnalyzer initialisé');
+    console.log('✅ (deliveryAnalyzer) DeliveryAnalyzer initialisé');
   }
 
   buildReferenceTables(clients, products) {
     // Log de vérification
-    console.log('📊 Données cache utilisées:', {
+    console.log('📊 (DeliveryAnalyzer) Données cache utilisées:', {
       clientsCount: clients?.length,
       productsCount: products?.length,
       clientSample: clients?.[0],
       productSample: products?.[0]
     });
-  
+
     return `TABLES DE RÉFÉRENCE:
      
     1. ABRÉVIATIONS PRODUITS:
     ${JSON.stringify(juiceFamilies, null, 2)}
      
     2. CLIENTS:
-    ${Array.isArray(clients) ? clients.map(c => 
+    ${Array.isArray(clients) ? clients.map(c =>
       `${c.Nom_Client} - Zone: ${c.zone || 'N/A'}`
     ).join('\n') : '(Aucun client dans le cache)'}
      
@@ -95,7 +96,11 @@ class DeliveryAnalyzer {
   
   3. RÈGLE TRAITEMENT PAR LIGNE:
   a) SÉQUENCES DE CHIFFRES:
-  - 1ère séquence = 1L : [C] [M] [F] [R] [CL]
+  - 1ère séquence = 
+  SI la colonne DEFAULT = 1 alors 1L : [C] [M] [F] [R] [CL]
+  SI la colonne DEFAULT = 25 alors 25CL : [C] [M] [F] [R] [CL]
+  SI la colonne DEFAULT = 5 alors 5L : [F] [C]
+  
     Ex: "0 1 0 5mg" → 1 M1L + 5 MG1L
   - 2EME SEQUENCE = 25CL : [C] [M] [F] [R] [CL]
     Ex: "1 1 1 1 1" → 1 C25CL, 1 M25CL, etc.
@@ -213,43 +218,85 @@ Résultat attendu:
 
   async analyzeMessage(message) {
     try {
-
-      console.log('📦 Analyse livraison:', {
-        message,
-        hasContext: !!this.context,
-        hasSystemPrompt: !!this.systemPrompt
-      });
-      
-      console.log('📝 Analyse message:', message);
-
-      // Vérifier si client dans le contexte
-      if (this.context.lastClient && !message.includes('\n')) {
-        message = `${this.context.lastClient.Nom_Client}\n${message}`;
-        console.log('📝 Message enrichi avec client du contexte:', message);
+      console.log('📝 Début analyse message:', message);
+  
+      // 1. Préparation du message avec le contexte si nécessaire
+      let processedMessage = message.trim();
+      if (this.context.lastClient && !processedMessage.includes('\n')) {
+        processedMessage = `${this.context.lastClient.Nom_Client}\n${processedMessage}`;
+        console.log('📝 Message enrichi avec client du contexte:', processedMessage);
       }
-
+  
+      // 2. Extraction et validation du client
+      const lines = processedMessage.split('\n');
+      const clientName = lines[0].trim();
+      
+      console.log('👤 (deliveryAnalyzer) Recherche client:', clientName);
+      
+      const clientResult = await clientLookupService.findClientByNameAndZone(clientName);
+      if (!clientResult || clientResult.status !== 'success') {
+        throw new Error(`Client non trouvé: ${clientName}`);
+      }
+  
+      // Récupérer la valeur DEFAULT depuis les abréviations
+      const defaultValue = clientResult.client.DEFAULT || '1';
+      console.log('✅ Client trouvé:', {
+        nom: clientResult.client.Nom_Client,
+        zone: clientResult.client.zone,
+        DEFAULT: defaultValue
+      });
+  
+      // 3. Construction du message enrichi pour Claude avec la valeur DEFAULT
+      const enrichedClientInfo = `Client ${clientResult.client.Nom_Client} (DEFAULT=${defaultValue})`;
+      const restOfMessage = lines.slice(1).join('\n');
+      const enrichedMessage = `${enrichedClientInfo}\n${restOfMessage}`;
+  
+      console.log('📦 Préparation analyse Claude:', {
+        hasContext: !!this.context,
+        hasSystemPrompt: !!this.systemPrompt,
+        messageLength: enrichedMessage.length,
+        defaultValue
+      });
+  
+      // 4. Appel à Claude pour l'analyse
       const response = await this.anthropic.messages.create({
         model: 'claude-3-sonnet-20240229',
         max_tokens: 2048,
         temperature: 0,
         messages: [{
           role: 'user',
-          content: `${message}\n\nAnalyse le message ci-dessus et renvoie l'objet JSON correspondant à la livraison.`
+          content: `${enrichedMessage}\n\nAnalyse le message ci-dessus et renvoie l'objet JSON correspondant à la livraison.`
         }],
         system: `${this.systemPrompt}\n\nIMPORTANT: Ne fais AUCUN texte d'accompagnement. Renvoie uniquement un objet JSON valide sans aucune autre réponse.`
       });
+  
+// 5. Traitement et enrichissement du résultat
+const result = JSON.parse(response.content[0].text);
 
-      const result = JSON.parse(response.content[0].text);
+// Enrichir avec toutes les données client trouvées par abréviation
+if (result.client) {
+  result.client = {
+    name: clientResult.client.Nom_Client, // Utiliser le nom complet trouvé
+    zone: result.client.zone,  // Garder la zone analysée
+    id: clientResult.client.ID_Client,
+    DEFAULT: clientResult.client.DEFAULT, // On s'assure que DEFAULT est copié
+    originalData: clientResult.client // On garde l'objet client complet
+  };
+}
 
-      // Enrichir avec données du contexte si nécessaire
-      if (result.client?.name && !result.client.zone && this.context.lastClient?.zone) {
-        result.client.zone = this.context.lastClient.zone;
-      }
+console.log('✅ (deliveryAnalyzer) Analyse terminée:', {
+  client: result.client,
+  productsCount: result.products?.length,
+  defaultValue: clientResult.client.DEFAULT
+});
 
-      return result;
-
+return result;
+  
     } catch (error) {
-      console.error('❌ Erreur analyse message:', error);
+      console.error('❌ Erreur analyse message:', {
+        message: error.message,
+        stack: error.stack
+      });
       throw error;
     }
   }
