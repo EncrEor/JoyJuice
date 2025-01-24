@@ -69,11 +69,10 @@ async generateResponse(analysis, result) {
       const clientName = analysis.client?.name || result.client?.name || result.livraison?.client?.name || 'client';
       const clientZone = analysis.client?.zone || result.client?.zone || result.livraison?.client?.zone || '';
       return {
-        message: `✅ [naturalResponder] Bon de livraison ${livraison_id} créé pour ${clientName}${clientZone ? ` (${clientZone})` : ''} : ${total} DNT`,
+        message: `✅ Commande ${livraison_id} créé pour ${clientName}${clientZone ? ` (${clientZone})` : ''} : ${total} DNT`,
         suggestions: ['Voir le détail', 'Nouvelle livraison']
       };
     }
-
 
     if (analysis.type === 'DEMANDE_INFO' && result.status === 'SUCCESS') {
       console.log('ℹ️ [generateResponse] Demande d\'informations détectée.');

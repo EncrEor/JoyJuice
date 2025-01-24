@@ -78,7 +78,7 @@ class DeliveryAnalyzer {
  
   1. RÈGLE CLIENT:
   - Première ligne = toujours le client
-  
+
   2. RÈGLE PRODUITS:
   - CONTENANCE: définit le volume (1L, 1l, 25CL,25, 25cl, 5L, 3L...)
     > Par défaut : 1L
@@ -95,13 +95,15 @@ class DeliveryAnalyzer {
     > Change avec le mot "Retour"
   
   3. RÈGLE TRAITEMENT PAR LIGNE:
-  a) SÉQUENCES DE CHIFFRES:
-  - 1ère séquence = 
-  SI la colonne DEFAULT = 1 alors 1L : [C] [M] [F] [R] [CL]
-  SI la colonne DEFAULT = 25 alors 25CL : [C] [M] [F] [R] [CL]
-  SI la colonne DEFAULT = 5 alors 5L : [F] [C]
   
-    Ex: "0 1 0 5mg" → 1 M1L + 5 MG1L
+  a) SÉQUENCES DE CHIFFRES:
+  - 1ère séquence (la 1ere ligne de chiffre)= 
+  SI le client sa valeur DEFAULT = 1 alors 1L : [C] [M] [F] [R] [CL]
+  SI le client sa valeur DEFAULT = 25 alors 25CL : [C] [M] [F] [R] [CL]
+  SI le client sa valeur DEFAULT = 5 alors 5L : [F] [C]
+    Ex1: (DEFAULT = 1) et (cas particulier ou on précise le nom du produit à coté de la quantité) : "0 1 0 5mg" → 1 M1L + 5 MG1L
+    Ex2: (DEFAULT = 5) : "1 3" → 1 F5L + 3 C5L
+
   - 2EME SEQUENCE = 25CL : [C] [M] [F] [R] [CL]
     Ex: "1 1 1 1 1" → 1 C25CL, 1 M25CL, etc.
   
@@ -119,8 +121,21 @@ class DeliveryAnalyzer {
 
   buildExamples() {
     return `EXEMPLES DE MESSAGES ET LEURS RÉSULTATS:
-  
+
 1. Message:
+716  (client avec DEFAULT=5)
+2 2
+Résultat attendu:
+{
+  "type": "DELIVERY",
+  "client": {"name": "716", "id": "C00021"},
+  "products": [
+    {"ID_Produit": "F5L", "quantite": 2},
+    {"ID_Produit": "C5L", "quantite": 2}
+  ]    
+}
+
+2. Message:
 Ksouri
 2 1 0 1mg
 1 1 1 1 1 
@@ -144,7 +159,7 @@ Résultat attendu:
   ]
 }
 
-2. Message:
+3. Message:
 Bgh nasr
 4 3 3
 5L
@@ -175,7 +190,7 @@ Résultat attendu:
     ]
 }
   
-3. Message:
+4. Message:
 Ksouri
 0 4 0
 Surgelé
