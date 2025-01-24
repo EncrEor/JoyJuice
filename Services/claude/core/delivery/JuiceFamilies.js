@@ -41,9 +41,9 @@ module.exports = {
   an: { familyCode: "AS", label: "Ananas" },
   
   // Kiwi
-  k: { familyCode: "KW", label: "Kiwi" },
-  kw: { familyCode: "KW", label: "Kiwi" },
-  kiwi: { familyCode: "KW", label: "Kiwi" },
+  k: { familyCode: "K", label: "Kiwi" },
+  kw: { familyCode: "K", label: "Kiwi" },
+  kiwi: { familyCode: "K", label: "Kiwi" },
   
   // Youppi
   y: { familyCode: "Y", label: "Youppi" },
@@ -54,6 +54,11 @@ module.exports = {
   ss: { familyCode: "SS", label: "Sunshine" },
   sunshine: { familyCode: "SS", label: "Sunshine" },
   
+  // Peche
+  peche: { familyCode: "P", label: "Peche" },
+  pech: { familyCode: "P", label: "Peche" },
+  pe: { familyCode: "P", label: "Peche" },
+
   // Peach Love
   pl: { familyCode: "PL", label: "Peach Love" },
   peach: { familyCode: "PL", label: "Peach Love" },

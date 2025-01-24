@@ -48,7 +48,7 @@ class ContextManager {
 
   async getConversationContext(userId) {
     try {
-      console.log(`🔍 [contextManager] Récupération contexte pour userId: ${userId}`);
+      //console.log(`🔍 [contextManager] Récupération contexte pour userId: ${userId}`);
       
       if (!userId) {
         throw new Error('userId requis');

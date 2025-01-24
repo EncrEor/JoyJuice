@@ -13,23 +13,33 @@ class ClaudeConfig {
     this.models = {
       default: 'claude-3-haiku-20240307',
       conversation: 'claude-3-haiku-20240307',
-      analysis: 'claude-3-haiku-20240307'
+      analysis: 'claude-3-haiku-20240307',
+      delivery: 'claude-3-5-sonnet-20241022'
     };
 
     this.systemPrompts = {
       conversation: `Tu es l'assistant JoyJuice qui aide Nizar à gérer ses livraisons de jus de fruits.`,
       analysis: `Tu analyses les données de livraison pour JoyJuice.`,
       completion: `Tu es l'assistant JoyJuice qui aide à compléter les informations de livraison.`,
+      delivery: `Tu es l'assistant JoyJuice qui crée les livraisons dans la base de données.`,
       default: `Tu es l'assistant JoyJuice qui aide à gérer les livraisons.`
     };
 
     this.config = {
       maxTokens: {
         conversation: 1024,
-        analysis: 3000,
-        default: 1024
+        analysis: 2048,
+        default: 1024,
+        delivery: 2048
       }
     };
+    
+    this.temperatures = {
+      default: 0.7,
+      analysis: 0,
+      delivery: 0.1 
+    };
+
 
     ClaudeConfig.instance = this;
 

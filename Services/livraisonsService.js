@@ -260,36 +260,29 @@ module.exports.addLivraison = async (livraisonData) => {
           premierProduit: livraisonData.produits[0]
         });
 
-      // 2.c Traitement des produits
-      let totalLivraison = 0;
-      const details = livraisonData.produits.map(produit => {
-        totalLivraison += produit.total;  // On garde cette ligne!
+// 2.c Traitement des produits
+let totalLivraison = 0;
+const details = livraisonData.produits
+  .filter(produit => produit.quantite > 0)  // Ajout du filtre ici
+  .map(produit => {
+    totalLivraison += produit.total;
+    return {
+      ID_Detail: `${newLivraisonId}-${produit.id}`,
+      ID_Livraison: newLivraisonId,
+      ID_Produit: produit.id,
+      Quantite: produit.quantite.toString(),
+      Prix_Unit: produit.prix_unitaire.toString(),
+      Total_Ligne: produit.total.toString()
+    };
+  });
 
-        return {
-          ID_Detail: `${newLivraisonId}-${produit.id}`,  // produit.id au lieu de produitInfo.ID_Produit
-          ID_Livraison: newLivraisonId,
-          ID_Produit: produit.id,         // produit.id au lieu de produitInfo.ID_Produit
-          Quantite: produit.quantite.toString(),
-          Prix_Unit: produit.prix_unitaire.toString(), // produit.prix_unitaire au lieu de produitInfo.Prix_Unitaire
-          Total_Ligne: produit.total.toString()    // produit.total au lieu de total
-        };
-      });
-
-      console.log('📋 Variables pour livraisonRow:', {
-        newLivraisonId,
-        formattedDate,
-        clientId: livraisonData.clientId,
-        totalLivraison: totalLivraison ? totalLivraison.toString() : 'undefined',
-        etape: 'Avant création livraisonRow'
-      });
-//LOG DOUBLON PEUT ETRE
-      console.log('🔍 Variables disponibles:', {
-        newLivraisonId,
-        formattedDate,
-        clientId: livraisonData.clientId,
-        totalLivraison
-      });
-// FIN DE LOG DOUBLON PEUT ETRE
+  console.log('📋 Préparation livraison:', {
+    newLivraisonId,
+    formattedDate,
+    clientId: livraisonData.clientId,
+    totalLivraison: totalLivraison.toString(),
+    etape: 'Avant création'
+  });
 
       // 2.d Création du tableau pour Google Sheets
       const livraisonRow = [
@@ -533,7 +526,7 @@ module.exports.deleteLivraison = async (id) => {
 // Validation des données de la livraison
 module.exports.validateLivraisonData = (livraisonData) => {
   try {
-    console.log("🔍 [livraisonsService] Validation données:", livraisonData);
+    //console.log("🔍 [livraisonsService] Validation données:", livraisonData);
 
     // Validation structure
     if (!livraisonData) {
@@ -551,15 +544,21 @@ module.exports.validateLivraisonData = (livraisonData) => {
         return false;
       }
 
-      if (!livraisonData.produits?.length) {
-        console.error("❌ [livraisonsService] Produits manquants");
+      if (!Array.isArray(livraisonData.produits) || !livraisonData.produits.length) {
+        console.error("❌ [livraisonsService] Produits manquants ou format invalide");
         return false;
       }
 
       // Validation produits
-      const produitsValides = livraisonData.produits.every(p => 
-        p.id && p.quantite && p.quantite > 0
-      );
+      const produitsValides = livraisonData.produits.every(p => {
+        const isValid = p.id && p.nom && typeof p.quantite === 'number' && 
+                       typeof p.prix_unitaire === 'number' && typeof p.total === 'number';
+        
+        if (!isValid) {
+          console.error("❌ [livraisonsService] Produit invalide:", p);
+        }
+        return isValid;
+      });
 
       if (!produitsValides) {
         console.error("❌ [livraisonsService] Données produits invalides");
@@ -572,7 +571,7 @@ module.exports.validateLivraisonData = (livraisonData) => {
 
     return false;
   } catch (error) {
-    console.error("❌ [livraisonsService] Erreur validation:", error.message);
+    console.error("❌ [livraisonsService] Erreur validation:", error);
     return false; 
   }
 };

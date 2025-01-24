@@ -49,14 +49,6 @@ class DeliveryAnalyzer {
   }
 
   buildReferenceTables(clients, products) {
-    // Log de vérification
-    console.log('📊 (DeliveryAnalyzer) Données cache utilisées:', {
-      clientsCount: clients?.length,
-      productsCount: products?.length,
-      clientSample: clients?.[0],
-      productSample: products?.[0]
-    });
-
     return `TABLES DE RÉFÉRENCE:
      
     1. ABRÉVIATIONS PRODUITS:
@@ -87,9 +79,8 @@ class DeliveryAnalyzer {
     
   - ATTRIBUT: définit si le produit est frais ou surgelé
     > PAR DEFAUT : frais (pas de suffixe)
-    > Si "surgelé/surg/surgele" : surgelé (ajoute 'S' à l'ID à partir du mot qui veut dire "surgelé")
-    IMPORTANT : > PAS DE SELECTION DE PRODUIT SURGELE TANT QUE surgelé, surg ou surgele n'est pas mentionné EXPLICITEMENT.
-        
+    > Si "surgelé/surg/Surgl/surgele" : surgelé. Garder Surgelé actif jusqu'a la fin du message ou le prochain Frais.
+    
   - TYPE: définit s'il s'agit d'une livraison ou d'un retour
     > Par défaut : livraison
     > Change avec le mot "Retour"
@@ -208,7 +199,7 @@ Résultat attendu:
       {"ID_Produit": "MG1LS", "quantite": 4},
       {"ID_Produit": "CL1LS", "quantite": 3},
       {"ID_Produit": "R1LS", "quantite": 3}, 
-      {"ID_Produit": "KW25CL", "quantite": 4}
+      {"ID_Produit": "K25CL", "quantite": 4}
     ]
   }
 
@@ -233,20 +224,20 @@ Résultat attendu:
 
   async analyzeMessage(message) {
     try {
-      console.log('📝 Début analyse message:', message);
+      console.log('📝 [DeliveryAnalyzer] Début analyse message:', message);
   
       // 1. Préparation du message avec le contexte si nécessaire
       let processedMessage = message.trim();
       if (this.context.lastClient && !processedMessage.includes('\n')) {
         processedMessage = `${this.context.lastClient.Nom_Client}\n${processedMessage}`;
-        console.log('📝 Message enrichi avec client du contexte:', processedMessage);
+        console.log('📝 [DeliveryAnalyzer] Message enrichi avec client du contexte:', processedMessage);
       }
   
       // 2. Extraction et validation du client
       const lines = processedMessage.split('\n');
       const clientName = lines[0].trim();
       
-      console.log('👤 (deliveryAnalyzer) Recherche client:', clientName);
+      console.log('👤 [DeliveryAnalyzer] Recherche client:', clientName);
       
       const clientResult = await clientLookupService.findClientByNameAndZone(clientName);
       if (!clientResult || clientResult.status !== 'success') {
@@ -255,18 +246,18 @@ Résultat attendu:
   
       // Récupérer la valeur DEFAULT depuis les abréviations
       const defaultValue = clientResult.client.DEFAULT || '1';
-      console.log('✅ Client trouvé:', {
-        nom: clientResult.client.Nom_Client,
-        zone: clientResult.client.zone,
-        DEFAULT: defaultValue
-      });
+      //console.log('✅ Client trouvé:', {
+      //  nom: clientResult.client.Nom_Client,
+      //  zone: clientResult.client.zone,
+     //   DEFAULT: defaultValue
+     // });
   
       // 3. Construction du message enrichi pour Claude avec la valeur DEFAULT
       const enrichedClientInfo = `Client ${clientResult.client.Nom_Client} (DEFAULT=${defaultValue})`;
       const restOfMessage = lines.slice(1).join('\n');
       const enrichedMessage = `${enrichedClientInfo}\n${restOfMessage}`;
   
-      console.log('📦 Préparation analyse Claude:', {
+      console.log('📦 [DeliveryAnalyzer] Préparation analyse Claude:', {
         hasContext: !!this.context,
         hasSystemPrompt: !!this.systemPrompt,
         messageLength: enrichedMessage.length,
@@ -275,9 +266,9 @@ Résultat attendu:
   
       // 4. Appel à Claude pour l'analyse
       const response = await this.anthropic.messages.create({
-        model: 'claude-3-sonnet-20240229',
+        model: 'claude-3-5-sonnet-20241022',
         max_tokens: 2048,
-        temperature: 0,
+        temperature: 0.05,
         messages: [{
           role: 'user',
           content: `${enrichedMessage}\n\nAnalyse le message ci-dessus et renvoie l'objet JSON correspondant à la livraison.`
@@ -299,7 +290,7 @@ if (result.client) {
   };
 }
 
-console.log('✅ (deliveryAnalyzer) Analyse terminée:', {
+console.log('✅ [DeliveryAnalyzer] Analyse terminée:', {
   client: result.client,
   productsCount: result.products?.length,
   defaultValue: clientResult.client.DEFAULT

@@ -14,7 +14,7 @@ router.post('/', async (req, res) => {
       });
     }
 
-    console.log('Message reçu de l\'utilisateur', userId, ':', message);
+    //console.log('Message reçu de l\'utilisateur', userId, ':', message);
     const response = await claudeService.processMessage(userId, message);
     
     res.status(200).json({

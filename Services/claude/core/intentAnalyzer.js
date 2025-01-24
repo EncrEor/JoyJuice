@@ -72,10 +72,10 @@ class IntentionAnalyzer {
       }
   
       const context = await contextManager.getConversationContext(userId);
-      console.log('📑 [intentAnalyzer] Contexte récupéré:', {
-        hasLastClient: !!context?.lastClient,
-        hasLastAnalysis: !!context?.lastAnalysisResult
-      });
+      //console.log('📑 [intentAnalyzer] Contexte récupéré:', {
+      //  hasLastClient: !!context?.lastClient,
+      //  hasLastAnalysis: !!context?.lastAnalysisResult
+      //});
   
       // Enrichissement contexte avec produits
       try {
