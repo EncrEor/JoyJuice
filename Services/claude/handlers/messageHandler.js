@@ -6,7 +6,7 @@ const clientHandler = require('./clientHandler');
 const deliveryHandler = require('./deliveryHandler');
 const contextManager = require('../core/contextManager');
 const intentAnalyzer = require('../core/intentAnalyzer');
-const claudeService = require('../core/claudeService');
+const { formatFinalResponse } = require('../utils/responseUtils');
 
 class MessageHandler {
   
@@ -49,8 +49,8 @@ class MessageHandler {
         context
       };
   
-      // 5) Mettre à jour le contexte (si nécessaire)
-      await contextManager.updateContext(userId, result);
+       // 5) Mettre à jour le contexte
+    await contextManager.updateContext(userId, enrichedResult);  //enriched ajouté
   
       // 6) Générer la réponse finalisée via naturalResponder
       const response = await naturalResponder.generateResponse(analysis, enrichedResult);
@@ -59,7 +59,7 @@ class MessageHandler {
       if (!response) {
         console.error('❌ [messageHandler] Erreur critique: response est undefined avant formatFinalResponse');
       }
-      return this.formatFinalResponse(response, context);
+      return formatFinalResponse(response, context);
   
     } catch (error) {
       console.error('❌ [MessageHandler] Erreur processMessage:', error);
@@ -106,34 +106,6 @@ class MessageHandler {
       ...baseResponse,
       success: false,
       error: result.message || 'Erreur inconnue'
-    };
-  }
-
-  formatFinalResponse(response, context) {
-    
-    if (!response?.message) {
-      console.warn('⚠️ Réponse sans message:', response);
-    }
-    
-    if (!response) {
-      console.error('❌ [messageHandler] Erreur critique: response est undefined dans formatFinalResponse');
-      return {
-        success: false,
-        message: 'Erreur inconnue',
-        data: null,
-        timestamp: new Date().toISOString()
-      };
-    }
-
-    return {
-      success: !response.error,
-      message: response?.message || 'Une erreur est survenue', // Ajout d'un message par défaut ici
-      data: {
-        type: response.type || 'RESPONSE',
-        content: response.data,
-        context: context
-      },
-      timestamp: new Date().toISOString()
     };
   }
 

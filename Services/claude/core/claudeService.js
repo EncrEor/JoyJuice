@@ -1,6 +1,7 @@
 // Services/claude/claudeService.js
 
 const { Anthropic } = require('@anthropic-ai/sdk');
+const { formatFinalResponse } = require('../utils/responseUtils');
 const contextManager = require('./contextManager');
 const intentAnalyzer = require('./intentAnalyzer');
 const naturalResponder = require('./naturalResponder');
@@ -12,7 +13,6 @@ const cacheManager = require('./cacheManager/cacheIndex');
 const indexManager = require('./indexManager');
 const deliveryHandler = require('../handlers/deliveryHandler');
 const path = require('path');
-const messageHandler = require('../handlers/messageHandler');
 const claudeConfig = require(path.resolve(__dirname, '../../../config/claudeConfig'));
 
 class ClaudeService {
@@ -87,7 +87,7 @@ class ClaudeService {
       // Génération de la réponse avec données complètes
       const response = await naturalResponder.generateResponse(analysis, enrichedResult);
 
-      return messageHandler.formatFinalResponse(response, context);
+      return formatFinalResponse(response, context);
 
     } catch (error) {
       console.error('❌ Erreur processMessage:', error);
