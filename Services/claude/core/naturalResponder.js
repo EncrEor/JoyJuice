@@ -1,276 +1,285 @@
-// Services/claude/core/naturalResponder.js
-const { Anthropic } = require('@anthropic-ai/sdk');
+// Services/claude/core/contextManager.js
+const NodeCache = require('node-cache');
+const clientLookupService = require('../../clientLookupService');
+const cacheManager = require('./cacheManager/cacheIndex');
+const StringUtils = require('../utils/stringUtils');
 
-class NaturalResponder {
+class ContextManager {
+  // Singleton instance
+  static instance = null;
+
+  // Cache uniquement pour les conversations actives
+  static conversationCache = new NodeCache({
+    stdTTL: 30 * 60,
+    checkperiod: 60 // Vérification toutes les minutes
+  });
+
   constructor() {
-    this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-
-    // Configuration du mode
-    this.config = {
-      conciseMode: true
-    };
-
-    this.systemPrompt = `Tu es l'assistant JoyJuice, avec accès direct au cache contenant :
-- Clients (détails, zones, ...)
-- Produits (noms, prix, ...)
-- Détail des Livraisons (quantités, produits, clients, zones, ...) 
-Tu aides le livreur à :
-- Obtenir les informations clients depuis la base de données
-- Créer et modifier les livraisons
-- Répondre aux questions du livreurs depuis les données existantes dans la base de données.
-
-Formats de réponse :
-1. Livraison : "Bon L00XX enregistré : [quantité] [produit] pour [client] ([zone])"
-2. Client ambigu : "[client] présent dans : [zone1], [zone2]"
-3. Erreur : "[problème]. [solution]"
-
-Règles :
-1. Réponses courtes et directes
-2. Inclure zone client si disponible
-3. Précision demandée si info manquante
-4. Suggestions uniquement si utiles
-5. Pas de répétition d'infos déjà connues`;
-}
-
-async generateResponse(analysis, result) {
-  try {
-    console.log('💬 [naturalResponder] Analyse message:', {
-      type: analysis?.type,
-      status: result?.status,
-      client: result?.client?.name
-    });
-
-    // Validate input
-    if (!analysis || !result) {
-      throw new Error('Paramètres invalides');
+    if (!ContextManager.instance) {
+      this.cacheStore = require('./cacheManager/cacheStore');
+      console.log('🔄 [contextManager] ContextManager: Instance de cacheStore obtenue');
+      ContextManager.instance = this;
     }
+    return ContextManager.instance;
+  }
 
-    // Handle errors
-    if (result.status === 'ERROR') {
-      const errorMsg = result.error?.message || 'Erreur technique';
-      console.error('❌ [naturalResponder] Erreur:', errorMsg);
-      return {
-        message: `Désolé, je ne peux pas traiter cette demande: ${errorMsg}`,
-        suggestions: ["Réessayer", "Reformuler la demande"],
-        error: true
-      };
-    }
+  async initialize() {
+    try {
+      console.log('🚀 [contextManager] Initialisation du ContextManager...');
 
-    //console.log('📥 [naturalResponder] Données reçues:', {analysis, result});
-
-    // Cas spécifique pour une livraison réussie
-    if (analysis.type === 'DELIVERY' && result.status === 'SUCCESS' && result.livraison?.status === 'success') {
-      const { livraison_id, total } = result.livraison;
-      if (!analysis.client?.name && !result.client?.name && !result.livraison?.client?.name) {
-        console.warn('⚠️ [naturalResponder] Aucune info client trouvée');
+      if (!this.cacheStore) {
+        throw new Error('[contextManager] CacheStore non disponible pour ContextManager');
       }
-      const clientName = analysis.client?.name || result.client?.name || result.livraison?.client?.name || 'client';
-      const clientZone = analysis.client?.zone || result.client?.zone || result.livraison?.client?.zone || '';
-      return {
-        message: `✅ Commande ${livraison_id} créé pour ${clientName}${clientZone ? ` (${clientZone})` : ''} : ${total} DNT`,
-        suggestions: ['Voir le détail', 'Nouvelle livraison']
-      };
+
+      if (!ContextManager.conversationCache) {
+        ContextManager.conversationCache = new NodeCache({
+          stdTTL: 30 * 60,
+          checkperiod: 60
+        });
+        console.log('✅ [contextManager] Cache de conversation initialisé');
+      }
+
+      console.log('✅ [contextManager] ContextManager initialisé');
+    } catch (error) {
+      console.error('❌ [contextManager] Erreur initialisation ContextManager:', error);
+      throw error;
     }
+  }
 
-    if (analysis.type === 'DEMANDE_INFO' && result.status === 'SUCCESS') {
-      console.log('ℹ️ [generateResponse] Demande d\'informations détectée.');
+  async getConversationContext(userId) {
+    try {
+      //console.log(`🔍 [contextManager] Récupération contexte pour userId: ${userId}`);
+      
+      if (!userId) {
+        throw new Error('userId requis');
+      }
 
-      const client = result.client;
-      const champsDemandes = analysis.intention_details.champs || [];
-      const reponses = [];
-
-      champsDemandes.forEach(champ => {
-        if (champ === 'adresse' && client?.Adresse) {
-          reponses.push(`Adresse : ${client.Adresse}`);
-        }
-        if (champ === 'tel' && client?.Tel) {
-          reponses.push(`Téléphone : ${client.Tel}`);
-        }
-        if (champ === 'solde' && client?.Solde) {
-          reponses.push(`Solde : ${client.Solde}`);
-        }
-      });
-
-      if (reponses.length > 0) {
-        return {
-          message: `Voici les informations demandées pour ${client.Nom_Client} :\n\n${reponses.join('\n')}`,
-          suggestions: ["Voir plus d'informations", "Créer une livraison"]
+      let context = ContextManager.conversationCache.get(userId);
+      
+      if (!context) {
+        console.log(`📝 [contextManager] Création nouveau contexte pour ${userId}`);
+        context = {
+          userId,
+          lastAnalysisResult: null,
+          lastClient: null,
+          createdAt: new Date().toISOString()
         };
+        ContextManager.conversationCache.set(userId, context);
       }
 
-      return {
-        message: `Je n'ai pas trouvé les informations demandées pour ${client.Nom_Client || "le client"}.\nPouvez-vous reformuler ?`,
-        suggestions: ["Réessayer avec d'autres informations"]
-      };
-    }
+      console.log(`✅ [contextManager] Contexte: ${JSON.stringify(context, null, 2)}`);
+      return context;
 
-    console.log('📝 [naturalResponder] Passage au modèle Claude pour un traitement plus libre.');
-    const prompt = this.buildPromptFromResults(analysis, result);
-
-    const response = await this.anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: prompt
-      }],
-      system: this.systemPrompt
-    });
-
-    if (!response?.content?.[0]?.text) {
-      console.error('❌ [naturalResponder] Réponse invalide de Claude.');
-      throw new Error('Réponse invalide.');
-    }
-
-    console.log('✅ [naturalResponder] Réponse générée avec succès :', response.content[0].text);
-    return {
-      message: response.content[0].text,
-      suggestions: []
-    };
-
-  } catch (error) {
-    console.error('❌ Erreur générale:', {
-      message: error.message,
-      stack: error.stack 
-    });
-    
-    return {
-      message: "Une erreur est survenue, veuillez réessayer.",
-      suggestions: ["Reformuler", "Contacter le support"],
-      error: true
-    };
-  }
-}
-
-buildPromptFromResults(analysis, result) {
-  try {
-    console.log('💬 [buildPromptFromResults] Début de la construction du prompt.');
-    
-    // Initialisation du prompt avec le contexte de base
-    let prompt = 'Contexte :';
-
-    // Ajout du type d'intention
-    if (analysis.type) {
-      prompt += `\nType d'intention: ${analysis.type}`;
-      console.log(`🔍 [buildPromptFromResults] Type d'intention détecté : ${analysis.type}`);
-    }
-
-    // Ajout des informations client si disponibles
-    if (result.client) {
-      const clientInfo = `${result.client.Nom_Client} (${result.client.Zone || 'zone non spécifiée'})`;
-      prompt += `\nClient: ${clientInfo}`;
-      console.log(`🔍 [buildPromptFromResults] Informations client ajoutées : ${clientInfo}`);
-    }
-
-    // Ajout du statut du résultat
-    prompt += `\nRésultat: ${result.status || 'non spécifié'}`;
-    console.log(`🔍 [buildPromptFromResults] Statut du résultat : ${result.status || 'non spécifié'}`);
-
-    // Ajout du message du résultat si disponible
-    if (result.message) {
-      prompt += `\nMessage: ${result.message}`;
-      console.log(`🔍 [buildPromptFromResults] Message du résultat : ${result.message}`);
-    }
-
-    // Ajout des champs demandés si disponibles
-    if (analysis.intention_details?.champs?.length > 0) {
-      const champsDemandes = analysis.intention_details.champs.join(', ');
-      prompt += `\nChamps demandés : ${champsDemandes}`;
-      console.log(`🔍 [buildPromptFromResults] Champs demandés ajoutés : ${champsDemandes}`);
-    }
-
-    // Ajout des actions possibles si disponibles
-    if (result.nextActions?.available) {
-      const actionsPossibles = result.nextActions.available.join(', ');
-      prompt += `\nActions possibles: ${actionsPossibles}`;
-      console.log(`🔍 [buildPromptFromResults] Actions possibles ajoutées : ${actionsPossibles}`);
-    }
-
-    // Finalisation et retour du prompt
-    console.log('✅ [buildPromptFromResults] Prompt construit avec succès :', prompt);
-    return prompt;
-  } catch (error) {
-    console.error('❌ [buildPromptFromResults] Erreur lors de la construction du prompt :', error.message);
-    throw error; // Relance l'erreur pour un traitement ultérieur
-  }
-}
-
-enrichResponse(message, analysis, result) {
-  try {
-    console.log('💬 [enrichResponse] Début de l\'enrichissement de la réponse.');
-    console.log('🔍 [enrichResponse] Message brut reçu :', message);
-    console.log('🔍 [enrichResponse] Analysis:', analysis);
-    console.log('🔍 [enrichResponse] Result:', result);
-
-    const response = {
-      message: message,
-      suggestions: []
-    };
-
-    // Ajout des suggestions si disponibles
-    if (result.nextActions?.available) {
-      response.suggestions = result.nextActions.available;
-      console.log('✅ [enrichResponse] Suggestions ajoutées :', result.nextActions.available);
-    }
-
-    // Gestion des clarifications si nécessaire
-    if (result.status === 'needs_clarification' && result.zones) {
-      response.message = `Client ambigu : "${result.client?.Nom_Client || 'Client'} présent dans : ${result.zones.join(', ')}"`;
-      response.suggestions = ['Préciser la zone'];
-      console.log('⚠️ [enrichResponse] Clarification nécessaire pour les zones :', result.zones);
-      return response;
-    }
-
-    // Génération dynamique de la réponse pour les demandes d'informations client
-    if (analysis.type === 'DEMANDE_INFO' && analysis.intention_details.type_info === 'INFO_CLIENT') {
-      console.log('🔍 [enrichResponse] Demande d\'information client détectée.');
-
-      const client = result.client || {};
-      const champsDemandes = analysis.intention_details.champs || [];
-      const availableFields = Object.keys(client).filter(key => client[key] !== undefined && client[key] !== 'NA');
-      const enrichedMessages = [];
-
-      console.log('🔍 [enrichResponse] Champs disponibles pour le client :', availableFields);
-      console.log('🔍 [enrichResponse] Champs demandés :', champsDemandes);
-
-      // Parcours des champs demandés pour générer la réponse
-      champsDemandes.forEach(champ => {
-        if (availableFields.includes(champ)) {
-          const champValue = client[champ];
-          enrichedMessages.push(`Le champ "${champ}" pour ${client.Nom_Client || 'ce client'} est : ${champValue}.`);
-          console.log(`✅ [enrichResponse] Champ "${champ}" ajouté à la réponse :`, champValue);
-        } else {
-          console.warn(`⚠️ [enrichResponse] Champ "${champ}" non disponible pour ce client.`);
-        }
+    } catch (error) {
+      console.error('❌ [contextManager] Erreur contexte:', {
+        userId,
+        error: error.message,
+        stack: error.stack
       });
-
-      // Si aucun champ spécifique demandé, fournir un résumé des informations disponibles
-      if (champsDemandes.length === 0) {
-        const resume = availableFields.map(field => `${field} : ${client[field]}`).join('\n');
-        response.message = `Voici les informations disponibles pour ${client.Nom_Client || 'ce client'} :\n${resume}`;
-        console.log('✅ [enrichResponse] Résumé des informations client :', resume);
-      } else if (enrichedMessages.length > 0) {
-        response.message = enrichedMessages.join('\n');
-        console.log('✅ [enrichResponse] Réponse enrichie générée :', response.message);
-      } else {
-        response.message = `Je n'ai pas trouvé les informations demandées (${champsDemandes.join(', ')}) pour ${client.Nom_Client || 'ce client'}.`;
-        console.log('⚠️ [enrichResponse] Aucune information trouvée pour les champs demandés.');
-      }
+      throw error;
     }
+  }
 
-    console.log('✅ [enrichResponse] Réponse finale enrichie :', response);
-    return response;
-  } catch (error) {
-    console.error('❌ [enrichResponse] Erreur durant l\'enrichissement de la réponse :', error);
+  async updateConversationContext(userId, updates) {
+    try {
+      // Validation explicite de userId
+      if (!userId) {
+        throw new Error('[contextManager] userId est requis pour mettre à jour le contexte.');
+      }
+  
+      console.log('🔄 [contextManager] Mise à jour contexte:', { userId, updates });
+  
+      // Ajout de validation stricte pour les données entrantes
+      if (updates.lastClient && (!updates.lastClient.name || !updates.lastClient.id)) {
+        throw new Error('[contextManager] Données client invalides pour la mise à jour du contexte');
+      }
+      if (updates.lastDelivery && (!updates.lastDelivery.livraison_id || !updates.lastDelivery.total)) {
+        throw new Error('[contextManager] Données livraison invalides pour la mise à jour du contexte');
+      }
+  
+      const currentContext = await this.getConversationContext(userId);
+  
+      if (updates.lastClient) {
+        const clientInfo = {
+          name: updates.lastClient.name || updates.lastClient.Nom_Client,
+          zone: updates.lastClient.zone || updates.lastClient.Zone,
+          id: updates.lastClient.id || updates.lastClient.ID_Client,
+          availableZones: updates.lastClient.availableZones || []
+        };
+  
+        console.log('👤 [contextManager] MAJ client:', {
+          ancien: currentContext.lastClient?.name,
+          nouveau: clientInfo.name,
+          zone: clientInfo.zone
+        });
+  
+        updates.lastClient = clientInfo;
+        updates.clientHistory = [
+          ...(currentContext.clientHistory || []),
+          {
+            id: clientInfo.id,
+            nom: clientInfo.name,
+            zone: clientInfo.zone,
+            timestamp: new Date().toISOString()
+          }
+        ].slice(-5);
+      }
+  
+      if (updates.lastDelivery) {
+        console.log('📦 [contextManager] MAJ livraison entrée:', updates.lastDelivery);
+  
+        updates.lastDelivery = {
+          status: updates.lastDelivery.status || 'SUCCESS',
+          livraison_id: updates.lastDelivery.livraison_id,
+          total: updates.lastDelivery.total,
+          details: updates.lastDelivery.details,
+          client: {
+            name: updates.lastDelivery.client?.name,
+            zone: updates.lastDelivery.client?.zone
+          }
+        };
+  
+        console.log('📦 [contextManager] MAJ livraison formatée:', updates.lastDelivery);
+      }
+  
+      const updatedContext = {
+        ...currentContext,
+        ...updates,
+        lastUpdate: new Date().toISOString()
+      };
+  
+      ContextManager.conversationCache.set(userId, updatedContext);
+      console.log('✅ [contextManager] Contexte mis à jour:', updatedContext);
+  
+      return updatedContext;
+    } catch (error) {
+      console.error('❌ [contextManager] Erreur mise à jour contexte:', {
+        userId,
+        updates,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  async resolveClientWithZone(clientName, zone = null) {
+    try {
+      if (!clientName) {
+        throw new Error('[contextManager] Nom du client requis');
+      }
+
+      console.log(`🔍 [contextManager] Résolution client "${clientName}"${zone ? ` (zone: ${zone})` : ''}`);
+
+      const result = await clientLookupService.findClientByNameAndZone(
+        clientName,
+        zone
+      );
+
+      console.log('📋 [contextManager] Résultat recherche:', result);
+
+      switch (result.status) {
+        case 'success': {
+          console.log('✅ [contextManager] Client unique trouvé:', result.client);
+
+          await this.updateClientCache(result.client);
+
+          return {
+            status: 'SUCCESS',
+            client: result.client,
+            message: `Client "${result.client.Nom_Client}" ${result.client.Zone ? `(${result.client.Zone})` : ''}`
+          };
+        }
+
+        case 'multiple': {
+          console.log('⚠️ [contextManager] Plusieurs clients possibles:', result.matches);
+
+          const zones = result.matches
+            .map(m => m.Zone)
+            .filter(Boolean);
+
+          return {
+            status: 'NEED_ZONE',
+            message: `Client "${clientName}" présent dans plusieurs zones. Veuillez préciser : ${zones.join(', ')}`,
+            matches: result.matches,
+            availableZones: zones,
+            originalName: clientName
+          };
+        }
+
+        case 'not_found': {
+          console.log('❌ [contextManager] Client non trouvé');
+          return {
+            status: 'NOT_FOUND',
+            message: `Client "${clientName}" introuvable${zone ? ` dans la zone ${zone}` : ''}`,
+            searchedName: clientName,
+            searchedZone: zone
+          };
+        }
+
+        default: {
+          console.error('❌ [contextManager] Status non géré:', result.status);
+          throw new Error('Résultat de recherche invalide');
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ [contextManager] Erreur résolution client:', error);
+      throw new Error(`Erreur lors de la résolution du client: ${error.message}`);
+    }
+  }
+
+  async updateClientCache(client) {
+    if (!client || !client.ID_Client) {
+      throw new Error('[contextManager] Données client manquantes ou invalides.');
+    }
+  
+    const clients = this.cacheStore.getData('clients') || { byId: {} };
+    clients.byId[client.ID_Client] = client;
+    this.cacheStore.setData('clients', clients);
+  
+    console.log(`✅ [contextManager] Cache mis à jour pour le client: ${client.ID_Client}`);
+  }
+  
+
+  static getCacheStatus() {
+    return cacheManager.getCacheStatus();
+  }
+
+  async validateUserId(userId) {
+    if (!userId) {
+      console.error('[contextManager] userId requis mais non fourni.');
+      throw new Error('userId est requis pour cette opération.');
+    }
+  }
+  
+  
+  async clearUserContext(userId) {
+    try {
+      validateUserId(userId); // Ajout de la validation
+      ContextManager.conversationCache.del(userId);
+      console.log(`🧹 [contextManager] Contexte nettoyé pour l'utilisateur ${userId}`);
+    } catch (error) {
+      console.error('❌ [contextManager] Erreur nettoyage contexte:', error);
+      throw error;
+    }
+  }
+  
+
+  hasActiveContext(userId) {
+    validateUserId(userId); // Ajout de la validation
+    return ContextManager.conversationCache.has(userId);
+  }
+  
+  getContextStats() {
+    const stats = ContextManager.conversationCache.getStats();
     return {
-      message: "Désolé, une erreur est survenue lors de l'enrichissement de la réponse.",
-      suggestions: ["Réessayer"],
-      error: true
+      activeContexts: stats.keys,
+      hits: stats.hits,
+      misses: stats.misses,
+      lastCheck: new Date().toISOString()
     };
   }
 }
-}
 
-module.exports = new NaturalResponder();
+module.exports = new ContextManager();
+module.exports.ContextManager = ContextManager;

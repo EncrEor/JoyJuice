@@ -25,8 +25,8 @@ class GoogleSheetsConfig {
     // Définition des plages pour chaque feuille
     this.ranges = {
       clients: 'Clients!A:G',
-      produits: 'Produits!A:E',
-      livraisons: 'Livraisons!A:E',
+      produits: 'Produits!A:L',
+      livraisons: 'Livraisons!A:F',
       detailsLivraisons: 'DetailsLivraisons!A:F',
       commandes: 'Commandes!A:H',
       detailsCommandes: 'DetailsCommandes!A:F'

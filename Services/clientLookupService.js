@@ -117,7 +117,7 @@ async function loadClientAbreviations() {
 }
 
 // Fonction principale de recherche
-module.exports.findClientByNameAndZone = async function(name, zone = null) {
+module.exports.findClientByNameAndZone = async function (name, zone = null) {
   try {
     console.log(` Début recherche - Nom: "${name}"`);
 
@@ -136,13 +136,22 @@ module.exports.findClientByNameAndZone = async function(name, zone = null) {
       const match = clientAbreviations.get(searchKey);
       if (match) {
         console.log('✅ (clientLookupService) Client trouvé par abréviation:', match);
+
+        // Nouvelle vérification de l'ID Odoo
+        if (!match.odooId) {
+          console.warn('⚠️ Client sans ID Odoo:', match.Nom_Client);
+          // Optionnel : throw new Error(`Client ${match.Nom_Client} sans ID Odoo`);
+        }
+
+        // Retour du client, en incluant éventuellement l'odooId
         return {
           status: 'success',
           client: {
             ID_Client: match.ID_Client,
             Nom_Client: match.Nom_Client,
             DEFAULT: match.DEFAULT,
-            zone: match.zone
+            zone: match.zone,
+            odooId: match.odooId || null
           }
         };
       }
@@ -150,9 +159,9 @@ module.exports.findClientByNameAndZone = async function(name, zone = null) {
 
     // 4. Sinon retourner non trouvé
     console.log('❌ Client non trouvé:', name);
-    return { 
-      status: 'not_found', 
-      message: `Aucun client "${name}" trouvé` 
+    return {
+      status: 'not_found',
+      message: `Aucun client "${name}" trouvé`
     };
 
   } catch (error) {

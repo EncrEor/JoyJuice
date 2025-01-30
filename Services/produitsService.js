@@ -1,5 +1,3 @@
-//services/produitsService.js
-
 const googleSheets = require('../config/googleSheetsConfig');
 
 // Constants
@@ -8,7 +6,8 @@ const COLUMNS = {
   NOM_PRODUIT: 1,
   PRIX_UNITAIRE: 2,
   CONTENANCE: 3,
-  QUANTITE_STOCK: 4
+  QUANTITE_STOCK: 4,
+  P_IDODOO: 11 // Ajout de la nouvelle colonne
 };
 
 class ProduitsService {
@@ -16,9 +15,9 @@ class ProduitsService {
     this.sheetRange = googleSheets.ranges.produits;
   }
 
-  // Validation du produit
+  // Validation des données produit
   validateProduitData(produitData) {
-    if (!produitData || !Array.isArray(produitData) || produitData.length !== 5) {
+    if (!produitData || !Array.isArray(produitData) || produitData.length < Object.keys(COLUMNS).length) {
       throw new Error('Format des données du produit invalide');
     }
 
@@ -26,7 +25,7 @@ class ProduitsService {
       throw new Error('ID produit requis');
     }
 
-    if (!produitData[COLUMNS.NOM_PRODUIT] || produitData[COLUMNS.NOM_PRODUIT].trim() === '') {
+    if (!produitData[COLUMNS.NOM_PRODUIT]?.trim()) {
       throw new Error('Nom du produit requis');
     }
 
@@ -41,66 +40,123 @@ class ProduitsService {
     return true;
   }
 
-async getProduitsData() {
-  try {
-    console.log('🔍 (produitsService) Récupération des données produits...');
-    const values = await googleSheets.getValue(this.sheetRange);
-    if (!values || values.length <= 1) return []; // Tenir compte de l'en-tête
-
-    // Retourner les données sans l'en-tête
-    return values.slice(1).map((row, index) => ({
-      rowIndex: index + 2, // +2 pour tenir compte de l'en-tête et de l'indexation commençant à 0
+  // Méthode utilitaire pour mapper une ligne de données à un objet produit
+  mapRowToProduit(row, index) {
+    return {
+      rowIndex: index + 2, // +2 pour tenir compte de l'en-tête et de l'indexation 0
       ID_Produit: row[COLUMNS.ID_PRODUIT],
       Nom_Produit: row[COLUMNS.NOM_PRODUIT],
       Prix_Unitaire: parseFloat((row[COLUMNS.PRIX_UNITAIRE] || '0').toString().replace(',', '.')) || 0,
       Contenance: row[COLUMNS.CONTENANCE],
-      Quantite_Stock: parseInt(row[COLUMNS.QUANTITE_STOCK], 10)
-    }));
-  } catch (error) {
-    console.error('(produitsService) Erreur lors de la récupération des produits:', error);
-    throw new Error('(produitsService)Erreur lors de la récupération des produits');
+      Quantite_Stock: parseInt(row[COLUMNS.QUANTITE_STOCK], 10),
+      P_IDODOO: row[COLUMNS.P_IDODOO] || null
+    };
   }
-}
 
-// Ajout de la fonction getProduitByNom dans produitsService.js
-
-async getProduitByNom(nomProduit) {
-  try {
-    const produits = await this.getProduitsData(); // Récupère tous les produits
-    return produits.find(produit => produit.Nom_Produit === nomProduit) || null; // Retourne le produit correspondant ou null si introuvable
-  } catch (error) {
-    console.error(`Erreur lors de la recherche du produit avec le nom ${nomProduit}:`, error);
-    throw new Error(`Erreur lors de la recherche du produit: ${error.message}`);
+  async getProduitsData() {
+    try {
+      console.log('🔍 [produitsService] Récupération des données produits...');
+      const values = await googleSheets.getValue(this.sheetRange);
+      
+      // Debug structure données reçues
+      console.log('📊 [produitsService] Structure données brutes:', {
+        colonnes: values[0], // en-têtes
+        exemple: values[1],  // premier produit
+        total: values.length
+      });
+  
+      if (!values || values.length <= 1) return [];
+  
+      const produits = values.slice(1).map(row => {
+        const produit = this.mapRowToProduit(row);
+        // Debug mapping
+        //console.log('🔄 [produitsService] Mapping produit:', {
+        //  ID_Produit: produit.ID_Produit,
+       //   P_IDODOO: produit.P_IDODOO,
+       //   raw: row
+       // });
+        return produit;
+      });
+  
+      return produits;
+    } catch (error) {
+      console.error('❌ [produitsService] Erreur récupération produits:', error);
+      throw error;
+    }
   }
-}
 
-
-async updateProduitByRow(rowIndex, produitData) {
-  try {
-    this.validateProduitData(produitData);
-
-    const range = `Produits!A${rowIndex}:E${rowIndex}`;
-    return await googleSheets.updateValue(range, produitData);
-  } catch (error) {
-    console.error('Erreur lors de la mise à jour du produit:', error);
-    throw new Error(`Erreur lors de la mise à jour du produit: ${error.message}`);
+  async getProductOdooId(productId) {
+    try {
+      console.log(`🔍 [produitsService] Résolution ID Odoo pour produit: ${productId}`);
+      const produits = await this.getProduitsData();
+  
+      // Extraction de la colonne ID_Produit des données 
+      console.log('📊 Produits chargés:', produits.map(p => ({
+        id: p.ID_Produit,
+        nom: p.Nom_Produit,
+        odooId: p.P_IDODOO
+      })));
+  
+      // Recherche du produit par ID
+      const produit = produits.find(p => p.ID_Produit === productId);
+      if (!produit) {
+        throw new Error(`Produit ${productId} non trouvé`);
+      }
+  
+      if (!produit.P_IDODOO) {
+        throw new Error(`[produitsService] ID Odoo manquant pour ${productId}`);
+      }
+  
+      console.log(`✅ [produitsService] ID Odoo trouvé pour ${productId}:`, produit.P_IDODOO);
+      return parseInt(produit.P_IDODOO);
+  
+    } catch (error) {
+      console.error(`❌ [produitsService] Erreur récupération ID Odoo:`, {
+        produitId: productId,
+        error: error.message
+      });
+      throw error;
+    }
   }
-}
+
+  async getProduitByNom(nomProduit) {
+    try {
+      const produits = await this.getProduitsData();
+      return produits.find(produit => produit.Nom_Produit === nomProduit) || null;
+    } catch (error) {
+      console.error(`[produitsService] Erreur lors de la recherche du produit avec le nom ${nomProduit}:`, error);
+      throw new Error(`[produitsService] Erreur lors de la recherche du produit: ${error.message}`);
+    }
+  }
+
+  _getRangeByRowIndex(rowIndex) {
+    return `Produits!A${rowIndex}:E${rowIndex}`;
+  }
+
+  async updateProduitByRow(rowIndex, produitData) {
+    try {
+      this.validateProduitData(produitData);
+      const range = this._getRangeByRowIndex(rowIndex);
+      return await googleSheets.updateValue(range, produitData);
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du produit:', error);
+      throw new Error(`Erreur lors de la mise à jour du produit: ${error.message}`);
+    }
+  }
 
   async addProduit(produitData) {
     try {
       this.validateProduitData(produitData);
 
-      // Vérifier si l'ID existe déjà
       const existingProduits = await this.getProduitsData();
       if (existingProduits.some(p => p.ID_Produit === produitData[COLUMNS.ID_PRODUIT])) {
-        throw new Error(`Un produit avec l'ID ${produitData[COLUMNS.ID_PRODUIT]} existe déjà`);
+        throw new Error(`[produitsService] Un produit avec l'ID ${produitData[COLUMNS.ID_PRODUIT]} existe déjà`);
       }
 
       return await googleSheets.appendValue(this.sheetRange, produitData);
     } catch (error) {
-      console.error('Erreur lors de l\'ajout du produit:', error);
-      throw new Error(`Erreur lors de l'ajout du produit: ${error.message}`);
+      console.error('[produitsService] Erreur lors de l\'ajout du produit:', error);
+      throw new Error(`[produitsService] Erreur lors de l'ajout du produit: ${error.message}`);
     }
   }
 
@@ -115,7 +171,7 @@ async updateProduitByRow(rowIndex, produitData) {
         throw new Error(`Produit avec l'ID ${id} non trouvé`);
       }
 
-      const range = `Produits!A${rowIndex + 1}:E${rowIndex + 1}`;
+      const range = this._getRangeByRowIndex(rowIndex + 1);
       return await googleSheets.updateValue(range, produitData);
     } catch (error) {
       console.error('Erreur lors de la mise à jour du produit:', error);
@@ -132,16 +188,15 @@ async updateProduitByRow(rowIndex, produitData) {
         throw new Error(`Produit avec l'ID ${id} non trouvé`);
       }
 
-      const range = `Produits!A${rowIndex + 1}:E${rowIndex + 1}`;
+      const range = this._getRangeByRowIndex(rowIndex + 1);
       const emptyRow = Array(Object.keys(COLUMNS).length).fill('');
       return await googleSheets.updateValue(range, emptyRow);
     } catch (error) {
-      console.error('Erreur lors de la suppression du produit:', error);
+      console.error(`Erreur lors de la suppression du produit avec ID: ${id}`, error);
       throw new Error(`Erreur lors de la suppression du produit: ${error.message}`);
     }
   }
 
-  // Générer un nouvel ID de produit unique
   async generateProductId() {
     try {
       const produits = await this.getProduitsData();

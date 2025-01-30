@@ -15,8 +15,8 @@ class DeliveryHandler {
 async createDelivery(userId, deliveryData) {
   try {
     console.log('📦 [DeliveryHandler] Début création livraison:', deliveryData);
-
-    // Enrichissement des produits
+    
+    // Enrichissement produits
     const cacheStore = require('../core/cacheManager/cacheStore');
     const productsCache = cacheStore.getData('products');
     
@@ -24,13 +24,11 @@ async createDelivery(userId, deliveryData) {
       throw new Error('Cache produits non disponible');
     }
 
-    // Enrichissement des produits
     const enrichedProducts = deliveryData.produits.map(produit => {
       const productInfo = productsCache.byId[produit.id];
       if (!productInfo) {
         throw new Error(`Produit ${produit.id} non trouvé dans le cache`);
       }
-      
       return {
         id: produit.id,
         nom: productInfo.Nom_Produit,
@@ -51,22 +49,12 @@ async createDelivery(userId, deliveryData) {
 
     console.log('💾 [DeliveryHandler] Données enrichies pour création:', livraisonData);
 
-    // Validation
-    if (!livraisonsService.validateLivraisonData(livraisonData)) {
-      throw new Error('Validation des données échouée');
-    }
-
-    // Enregistrement
+    // Création via livraisonsService
     const result = await livraisonsService.addLivraison(livraisonData);
-    return {
-      status: 'SUCCESS',
-      client: {
-        name: deliveryData.clientName,
-        zone: deliveryData.zone,
-        id: deliveryData.clientId
-      },
-      livraison: result
-    };
+    console.log('✅ [DeliveryHandler] Résultat après ajout:', result);
+
+    // Retourner le résultat complet
+    return result;  // Important: on retourne tout le résultat!
 
   } catch (error) {
     console.error('❌ [DeliveryHandler] Erreur:', error.message);

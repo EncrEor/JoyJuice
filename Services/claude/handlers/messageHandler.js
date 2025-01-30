@@ -4,63 +4,63 @@ const clientHandler = require('./clientHandler');
 const deliveryHandler = require('./deliveryHandler');
 const contextManager = require('../core/contextManager');
 const intentAnalyzer = require('../core/intentAnalyzer');
+const claudeService = require('../core/claudeService');
 
 class MessageHandler {
+  
+
   async processMessage(userId, message) {
     try {
-      console.log(`📥 Message de ${userId}:`, message);
-      
+      console.log(`📥 Message reçu de l'utilisateur ${userId}:`, message);
+  
+      // 1) Récupération du contexte
       const context = await contextManager.getConversationContext(userId);
-      const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message);
-      console.log('🔍 Analyse:', analysis);
-
-      if (!analysis.analyse) {
-        throw ErrorUtils.createError('Erreur analyse message', 'ANALYSIS_ERROR');
+  
+      // 2) Analyse de l’intention
+      const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message, context);
+  
+      // On s'assure de stocker le userId dans l'analyse (si besoin plus tard)
+      analysis.userId = userId;
+  
+      console.log('🔍 [MessageHandler] Analyse obtenue:', analysis);
+  
+      // Vérification basique (peut être adaptée)
+      if (!analysis.type) {
+        throw new Error('[MessageHandler] Aucune intention détectée dans l’analyse.');
       }
-
-      const result = await this.executeAction(analysis);
-      console.log('✨ Résultat:', result);
-
-      if (result.needsContext) {
-        await this.updateContext(userId, analysis, result);
-      }
-
-      return this.formatResponse(result);
-
+  
+      // 3) Exécuter l’action en fonction de l’intention
+      const actionResult = await claudeService.executeAction(analysis, context);
+  
+      // 4) Combiner le résultat avec l’analyse/contexte
+      const enrichedResult = {
+        ...actionResult,
+        // On force le type si absent
+        type: analysis.type || actionResult.type,
+        analysis,               // Pour conserver l’analyse initiale
+        client: actionResult.client || analysis.client,
+        context
+      };
+  
+      // 5) Mettre à jour le contexte (si nécessaire)
+      await this.updateContext(userId, analysis, enrichedResult);
+  
+      // 6) Générer la réponse finalisée via naturalResponder
+      const response = await naturalResponder.generateResponse(analysis, enrichedResult);
+  
+      // 7) Formater et retourner la réponse finale
+      return this.formatFinalResponse(response, context);
+  
     } catch (error) {
-      return ErrorUtils.handleApiError(error);
-    }
-  }
-
-  async executeAction(analysis) {
-    const { intention, client, produits } = analysis.analyse;
-
-    switch (intention) {
-      case 'CLIENT_SELECTION':
-        return await clientHandler.validateAndEnrichClient(client);
-
-      case 'LIVRAISON':
-        return await deliveryHandler.createDelivery(analysis.userId, {
-          clientName: client.nom,
-          zone: client.zone,
-          produits: produits
-        });
-
-      case 'MODIFICATION_QUANTITE':
-        if (!analysis.livraisonId) {
-          throw ErrorUtils.createError('ID livraison manquant', 'MISSING_DATA');
-        }
-        return await deliveryHandler.updateQuantities(analysis.livraisonId, produits);
-
-      case 'CONVERSATION':
-        return {
-          status: 'SUCCESS',
-          type: 'CONVERSATION',
-          requiresResponse: true
-        };
-
-      default:
-        throw ErrorUtils.createError('Action non supportée', 'INVALID_ACTION');
+      console.error('❌ [MessageHandler] Erreur processMessage:', error);
+  
+      // Exemple de format d'erreur à renvoyer
+      return {
+        success: false,
+        message: error.message || 'Erreur interne',
+        code: error.code || 'INTERNAL_ERROR',
+        timestamp: new Date().toISOString()
+      };
     }
   }
 
@@ -115,6 +115,25 @@ class MessageHandler {
       error: result.message || 'Erreur inconnue'
     };
   }
+
+  formatFinalResponse(response, context) {
+    
+    if (!response?.message) {
+      console.warn('⚠️ Réponse sans message:', response);
+    }
+    
+    return {
+      success: !response.error,
+      message: response?.message || 'Une erreur est survenue', // Ajout d'un message par défaut ici
+      data: {
+        type: response.type || 'RESPONSE',
+        content: response.data,
+        context: context
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+
 
   isConversationalMessage(message) {
     const conversationalPatterns = [

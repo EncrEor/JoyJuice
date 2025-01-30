@@ -12,6 +12,7 @@ const cacheManager = require('./cacheManager/cacheIndex');
 const indexManager = require('./indexManager');
 const deliveryHandler = require('../handlers/deliveryHandler');
 const path = require('path');
+const messageHandler = require('../handlers/messageHandler');
 const claudeConfig = require(path.resolve(__dirname, '../../../config/claudeConfig'));
 
 class ClaudeService {
@@ -61,38 +62,38 @@ class ClaudeService {
 
   async processMessage(userId, message) {
     try {
-      console.log(`📩 Message reçu de ${userId}:`, message);
+        console.log(`📩 Message reçu de ${userId}:`, message);
 
-      const context = await contextManager.getConversationContext(userId);
+        const context = await contextManager.getConversationContext(userId);
+        const analysis = await this.retryRequest(() => 
+            intentAnalyzer.analyzeContextualMessage(userId, message, context)
+        );
 
-      // Enrichir le contexte avec les produits du cache
-      const cacheStore = cacheManager.getCacheStoreInstance();
-      if (cacheStore) {
-        const products = cacheStore.getData('products')?.byId;
-        if (products) {
-          context.products = products;
-        }
-      }
+        // Exécution avec conservation du contexte original 
+        const actionResult = await this.executeAction(analysis, context);
+        
+        // Enrichissement du résultat avec infos essentielles
+        const enrichedResult = {
+            ...actionResult,
+            type: analysis.type || actionResult.type,
+            analysis: analysis, // Préservation de l'analyse originale
+            client: actionResult.client || analysis.client,
+            context: context
+        };
 
-      // Analyse initiale
-      const analysis = await this.retryRequest(() => intentAnalyzer.analyzeContextualMessage(userId, message, context));
+        // Mise à jour du contexte
+        await this.updateContext(userId, analysis, enrichedResult);
 
-      // Exécution de l'action
-      const result = await this.executeAction(analysis, context);
-
-      // Mise à jour du contexte
-      await this.updateContext(userId, analysis, result);
-
-      // Génération de la réponse
-      const response = await this.generateResponse(analysis, result);
-
-      return this.formatFinalResponse(response, context);
+        // Génération de la réponse avec données complètes
+        const response = await naturalResponder.generateResponse(analysis, enrichedResult);
+        
+        return messageHandler.formatFinalResponse(response, context);
 
     } catch (error) {
-      console.error('❌ Erreur processMessage:', error);
-      return this.handleError(error);
+        console.error('❌ Erreur processMessage:', error);
+        return this.handleError(error);
     }
-  }
+}
 
   formatClientResponse(clientResult) {
     switch (clientResult.status) {
@@ -162,46 +163,83 @@ class ClaudeService {
   async executeAction(analysis, context) {
     try {
       console.log('⚡ (claudeService) Exécution action:', analysis.type);
-
+  
       switch (analysis.type) {
         
         case 'DELIVERY': {
-          console.log('🔍 (claudeService) Client:', analysis.client);
-        
-          const deliveryData = {
-            clientName: analysis.client.name,
-            clientId: analysis.client.id,
-            zone: analysis.client.zone,
-            DEFAULT: analysis.client.DEFAULT,
-            produits: analysis.products.map(p => ({
-              id: p.ID_Produit,
-              nom: p.Nom_Produit,
-              quantite: p.quantite
-            }))
-          };
-        
-          console.log('📦 (claudeService) Données livraison:', deliveryData);
-          const result = await deliveryHandler.createDelivery(analysis.userId, deliveryData);
-        
-          return {
-            type: 'DELIVERY',
-            status: 'SUCCESS',
-            client: {
-              name: analysis.client.name,
-              zone: analysis.client.zone,
-              id: analysis.client.id
-            },
-            livraison: {
-              status: result.livraison.status,
-              livraison_id: result.livraison.livraison_id,
-              total: result.livraison.total,
-              details: result.livraison.details,
-              client: {
-                name: analysis.client.name,
-                zone: analysis.client.zone || ''
-              }
+          try {
+            console.log('⚡ (claudeService) Exécution action:', analysis.type);
+            
+            // Validation d'entrée
+            if (!analysis.client || !analysis.products) {
+              throw new Error('Données d analyse invalides');
             }
-          };
+        
+            // Préparation données livraison
+            const deliveryData = {
+              clientName: analysis.client.name,
+              clientId: analysis.client.id,
+              zone: analysis.client.zone,
+              DEFAULT: analysis.client.DEFAULT,
+              produits: analysis.products.map(p => ({
+                id: p.ID_Produit,
+                nom: p.Nom_Produit,
+                quantite: p.quantite
+              }))
+            };
+        
+            console.log('🔄 (claudeService) DeliveryData préparées:', deliveryData);
+        
+            // Création livraison
+            const result = await deliveryHandler.createDelivery(analysis.userId, deliveryData);
+            console.log('📦 (claudeService) Résultat brut deliveryHandler:', JSON.stringify(result, null, 2));
+        
+            // Validation résultat
+            if (!result.success || !result.livraison || !result.client) {
+              throw new Error('Données de livraison invalides');
+            }
+        
+            try {
+              // Construction réponse avec mapping client
+              const response = {
+                type: 'DELIVERY',
+                status: result.status,
+                client: {
+                  name: result.client.Nom_Client,
+                  zone: result.client.Zone,
+                  id: result.client.ID_Client
+                },
+                livraison: result.livraison,
+                message: result.message
+              };
+        
+              console.log('✅ (claudeService) Réponse avant context:', response);
+        
+              // Mise à jour contexte
+              await contextManager.updateConversationContext(analysis.userId, {
+                lastClient: response.client,
+                lastDelivery: response.livraison
+              });
+        
+              console.log('✅ (claudeService) Réponse finale:', response);
+              return response;
+        
+            } catch (mappingError) {
+              console.error('❌ (claudeService) Erreur mapping:', mappingError);
+              throw mappingError;
+            }
+        
+          } catch (error) {
+            console.error('❌ (claudeService) Erreur:', {
+              message: error.message,
+              stack: error.stack
+            });
+            return {
+              type: 'DELIVERY', 
+              status: 'ERROR',
+              error: error.message
+            };
+          }
         }
 
         case 'CLIENT_SELECTION': {
@@ -211,16 +249,6 @@ class ClaudeService {
           });
 
           const clientResult = await clientHandler.handleClientSelection(analysis.intention_details.client, analysis.userId);
-
-          if (clientResult.status === 'needs_clarification') {
-            return {
-              status: 'NEED_ZONE',
-              message: clientResult.message,
-              matches: clientResult.matches,
-              zones: clientResult.zones
-            };
-          }
-
           return clientResult;
         }
 
@@ -327,92 +355,73 @@ class ClaudeService {
 
   async handleInfoRequest(analysis) {
     try {
-        const { currentContext } = analysis;
-    
-        if (!currentContext?.lastClient) {
-          throw ErrorUtils.createError('Aucun client actuellement sélectionné dans le contexte.', 'NO_CLIENT_IN_CONTEXT');
-        }
-    
-        const client = currentContext.lastClient;
-        if (client.availableZones && client.availableZones.length > 0) {
-          return {
-            status: 'SUCCESS',
-            message: `Zones disponibles pour ${client.name}: ${client.availableZones.join(', ')}`,
-          };
-        } else {
-          throw ErrorUtils.createError('Aucune zone disponible trouvée pour le client dans le contexte.', 'NO_ZONES_AVAILABLE');
-        }
-      } catch (error) {
-        console.error('❌ Erreur handleInfoRequest:', error);
+      const { currentContext } = analysis;
+
+      if (!currentContext?.lastClient) {
+        throw ErrorUtils.createError('Aucun client actuellement sélectionné dans le contexte.', 'NO_CLIENT_IN_CONTEXT');
+      }
+
+      const client = currentContext.lastClient;
+      if (client.availableZones && client.availableZones.length > 0) {
         return {
-          status: 'ERROR',
-          message: error.message || 'Erreur lors de la récupération des informations sur les zones',
-          details: error.details || null
+          status: 'SUCCESS',
+          message: `Zones disponibles pour ${client.name}: ${client.availableZones.join(', ')}`,
         };
+      } else {
+        throw ErrorUtils.createError('Aucune zone disponible trouvée pour le client dans le contexte.', 'NO_ZONES_AVAILABLE');
       }
-  }
-
-async updateContext(userId, analysis, result) {
-  try {
-    const contextUpdate = {};
-
-    if (result.status === 'SUCCESS') {
-      if (result.client) {
-        contextUpdate.lastClient = {
-          name: result.client.name,
-          zone: result.client.zone,
-          id: result.client.id
-        };
-      }
-
-      if (result.livraison) {
-        contextUpdate.lastDelivery = result.livraison;
-      }
-
-      if (Object.keys(contextUpdate).length > 0) {
-        await contextManager.updateConversationContext(userId, contextUpdate);
-      }
+    } catch (error) {
+      console.error('❌ Erreur handleInfoRequest:', error);
+      return {
+        status: 'ERROR',
+        message: error.message || 'Erreur lors de la récupération des informations sur les zones',
+        details: error.details || null
+      };
     }
-  } catch (error) {
-    console.error('❌ Erreur updateContext:', error);
   }
+
+  async updateContext(userId, analysis, result) {
+    try {
+        if (!userId) {
+            console.error('❌ [claudeService] userId manquant pour la mise à jour du contexte');
+            return;
+        }
+
+        const contextUpdate = {};
+
+        if (result.success !== false) {  // Vérification explicite
+            if (result.client) {
+                contextUpdate.lastClient = {
+                    name: result.client.Nom_Client || result.client.name,
+                    zone: result.client.Zone || result.client.zone,
+                    id: result.client.ID_Client || result.client.id
+                };
+            }
+
+            if (result.livraison) {
+                contextUpdate.lastDelivery = {
+                    id: result.livraison.id,
+                    odoo_id: result.livraison.odoo_id,
+                    total: result.livraison.total,
+                    details: result.livraison.details
+                };
+            }
+
+            console.log('📝 [claudeService] Mise à jour contexte:', {
+                userId,
+                updates: contextUpdate
+            });
+
+            if (Object.keys(contextUpdate).length > 0) {
+                await contextManager.updateConversationContext(userId, contextUpdate);
+            }
+        }
+    } catch (error) {
+        console.error('❌ [claudeService] Erreur mise à jour contexte:', error);
+        // Ne pas propager l'erreur pour éviter d'impacter le flux principal
+    }
 }
 
-
-  async generateResponse(analysis, result) {
-    try {
-      
-      //console.log('🔄 Transmission vers naturalResponder:', {
-      //  type: 'DELIVERY',
-      //  status: 'SUCCESS', 
-      //  client: analysis.client,
-      //  livraison: result.livraison
-      // });
-    
-        const naturalResponse = await naturalResponder.generateResponse(analysis, result);
-    
-        return {
-          message: naturalResponse.message,
-          context: result.context || {}
-        };
-    } catch (error) {
-        console.error('❌ Erreur generateResponse:', error);
-        throw error;
-    }
-  }
-
-  formatFinalResponse(response, context) {
-    return {
-      success: !response.error,
-      message: response.message,
-      data: {
-        type: response.type || 'RESPONSE',
-        content: response.data,
-        context: response.context
-      },
-      timestamp: new Date().toISOString()
-    };
-  }
 
   handleError(error) {
     console.error('❌ Erreur:', error);
