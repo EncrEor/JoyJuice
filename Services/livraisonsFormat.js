@@ -1,7 +1,7 @@
 // Services/livraisonsFormat.js
 
 const detailsLivraisonsService = require('./detailsLivraisonsService');
-const { COLUMNS } = require('./livraisonsService');
+const { COLUMNS } = require('./constants/livraisonsConstants');
 const odooSalesService = require('./odooSalesService');
 const produitsService = require('./produitsService'); // Pour getProductOdooId
 

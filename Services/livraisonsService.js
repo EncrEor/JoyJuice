@@ -33,14 +33,7 @@ const DateUtils = require('./claude/core/cacheManager/dateUtils');
 const CONFIG_RANGE = 'Config!A1:B10';
 const LIVRAISONS_RANGE = 'Livraisons!A2:E1000';
 
-const COLUMNS = {
-  ID_LIVRAISON: 0,
-  DATE_LIVRAISON: 1,
-  ID_CLIENT: 2,
-  TOTAL_LIVRAISON: 3,
-  STATUT_L: 4,
-  ID_ODOO: 11  // Position de P_IDODOO
-};
+const { COLUMNS } = require('./constants/livraisonsConstants');
 
 const FORMAT_DATE_REGEX = /^\d{2}\/\d{2}\/\d{4}$/;
 const STATUTS_VALIDES = ['En cours', 'Terminée', 'Annulée'];
