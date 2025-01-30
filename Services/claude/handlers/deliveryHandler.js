@@ -1,3 +1,6 @@
+//Services/claude/handlers/deliveryHandler.js
+
+
 const StringUtils = require('../utils/stringUtils');
 const ValidationUtils = require('../utils/validationUtils');
 const ErrorUtils = require('../utils/errorUtils');
@@ -5,6 +8,8 @@ const clientHandler = require('./clientHandler');
 const livraisonsService = require('../../livraisonsService');
 const productLookupService = require('../../productLookupService');
 const DateUtils = require('../core/cacheManager/dateUtils');
+const { validateResponse } = require('../utils/responseUtils');
+
 
 class DeliveryHandler {
   constructor() {
@@ -31,7 +36,7 @@ async createDelivery(userId, deliveryData) {
       }
       return {
         id: produit.id,
-        nom: productInfo.Nom_Produit,
+        nom: productInfo.Nom_Produit || `Produit inconnu (${produit.id})`,
         quantite: produit.quantite,
         prix_unitaire: productInfo.Prix_Unitaire,
         total: produit.quantite * productInfo.Prix_Unitaire
@@ -53,8 +58,18 @@ async createDelivery(userId, deliveryData) {
     const result = await livraisonsService.addLivraison(livraisonData);
     console.log('✅ [DeliveryHandler] Résultat après ajout:', result);
 
-    // Retourner le résultat complet
-    return result;  // Important: on retourne tout le résultat!
+    // ✅ Modification du retour pour garantir le format correct
+    return {
+      ...result,
+      livraison: {
+        ...result.livraison,
+        client: {
+          name: result.client?.name || deliveryData.clientName,
+          id: result.client?.id || deliveryData.clientId,
+          zone: result.client?.zone || deliveryData.zone
+        }
+      }
+    };
 
   } catch (error) {
     console.error('❌ [DeliveryHandler] Erreur:', error.message);

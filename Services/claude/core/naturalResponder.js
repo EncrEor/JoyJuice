@@ -1,4 +1,5 @@
-// Services/claude/core/contextManager.js
+// Services/claude/core/naturlResponder.js
+
 const NodeCache = require('node-cache');
 const clientLookupService = require('../../clientLookupService');
 const cacheManager = require('./cacheManager/cacheIndex');
@@ -103,8 +104,7 @@ class ContextManager {
         const clientInfo = {
           name: updates.lastClient.name || updates.lastClient.Nom_Client,
           zone: updates.lastClient.zone || updates.lastClient.Zone,
-          id: updates.lastClient.id || updates.lastClient.ID_Client,
-          availableZones: updates.lastClient.availableZones || []
+          id: updates.lastClient.id || updates.lastClient.ID_Client
         };
   
         console.log('👤 [contextManager] MAJ client:', {

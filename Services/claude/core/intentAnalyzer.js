@@ -1,18 +1,16 @@
 // Services/claude/core/intentAnalyzer.js
-const { Anthropic } = require('@anthropic-ai/sdk');
+const claudeClient = require('./claudeClient');
 const contextManager = require('../core/contextManager');
 const StringUtils = require('../utils/stringUtils');
 const ErrorUtils = require('../utils/errorUtils');
 const clientLookupService = require('../../clientLookupService');
 const cacheManager = require('./cacheManager/cacheIndex');
-const claudeService = require('./claudeService');
+const { validateResponse } = require('../utils/responseUtils');
+
 const DeliveryAnalyzer = require('./delivery/deliveryAnalyzer');
 
 class IntentionAnalyzer {
   constructor() {
-    this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
 
     this.systemPrompt = `Tu es l'assistant JoyJuice qui aide Le livreur à créer ses bons de livraisons de jus de fruits quand il livre ses clients.
     Tu dois analyser chaque message en français pour comprendre naturellement les demandes et identifier les actions requises.
@@ -109,7 +107,9 @@ class IntentionAnalyzer {
         default: { // DELIVERY par défaut
           const deliveryAnalyzer = new DeliveryAnalyzer(context);
           await deliveryAnalyzer.initialize();
-          return await deliveryAnalyzer.analyzeMessage(message);
+          const result = await deliveryAnalyzer.analyzeMessage(message);
+console.log("📤 [DEBUG] Avant validation de intentAnalyzer:", JSON.stringify(result, null, 2));
+return validateResponse(result);
         }
       }
   
@@ -136,35 +136,17 @@ class IntentionAnalyzer {
     return 'DELIVERY';
   }
 
-  // Nouvelle méthode helper
-  async retryClaudeCall(enrichedMessage, maxRetries = 3) {
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        console.log(`🔄 Tentative ${i + 1}/${maxRetries} appel Claude`);
-
-        const response = await this.anthropic.messages.create({
-          model: 'claude-3-haiku-20240307',
-          max_tokens: 1024,
-          messages: [{
-            role: 'user',
-            content: enrichedMessage
-          }],
-          system: this.systemPrompt
+  async retryClaudeCall(enrichedMessage) {
+    try {
+        console.log('🔄 [intentAnalyzer] Appel Claude via client');
+        return await claudeClient.call(enrichedMessage, 'analysis', {
+            systemPrompt: this.systemPrompt
         });
-
-        if (!response?.content?.[0]?.text) {
-          throw new Error('[intentAnalyzer] Réponse Claude invalide : contenu manquant');
-        }
-
-        return response;
-
-      } catch (error) {
-        console.error(`❌ [intentAnalyzer] Erreur tentative ${i + 1}:`, error);
-        if (i === maxRetries - 1) throw error;
-        await new Promise(r => setTimeout(r, 2000)); // 2s entre les tentatives
-      }
+    } catch (error) {
+        console.error('❌ [intentAnalyzer] Erreur appel Claude:', error);
+        throw error;
     }
-  }
+}
 
   async validateAndEnrichAnalysis(analysis) {
     try {

@@ -83,85 +83,125 @@ class ContextManager {
 
   async updateConversationContext(userId, updates) {
     try {
-      // Validation explicite de userId
-      if (!userId) {
-        throw new Error('[contextManager] userId est requis pour mettre à jour le contexte.');
-      }
-  
-      console.log('🔄 [contextManager] Mise à jour contexte:', { userId, updates });
-  
-      // Ajout de validation stricte pour les données entrantes
-      if (updates.lastClient && (!updates.lastClient.name || !updates.lastClient.id)) {
-        throw new Error('[contextManager] Données client invalides pour la mise à jour du contexte');
-      }
-      if (updates.lastDelivery && (!updates.lastDelivery.livraison_id || !updates.lastDelivery.total)) {
-        throw new Error('[contextManager] Données livraison invalides pour la mise à jour du contexte');
-      }
-  
-      const currentContext = await this.getConversationContext(userId);
-  
-      if (updates.lastClient) {
-        const clientInfo = {
-          name: updates.lastClient.name || updates.lastClient.Nom_Client,
-          zone: updates.lastClient.zone || updates.lastClient.Zone,
-          id: updates.lastClient.id || updates.lastClient.ID_Client,
-          availableZones: updates.lastClient.availableZones || []
+        // ✅ Validation stricte de userId
+        if (!userId) {
+            throw new Error('[contextManager] userId est requis pour mettre à jour le contexte.');
+        }
+
+        console.log('🔄 [contextManager] Mise à jour contexte:', { userId, updates });
+        console.log('🔍 CHECK: updates.lastClient =', updates.lastClient);
+        console.log('🔍 CHECK: updates.lastDelivery =', updates.lastDelivery);
+
+        // ✅ Définition des fonctions de validation
+        const validateClient = (client) => {
+            if (!client || typeof client !== 'object') {
+                throw new Error('[contextManager] Client invalide : objet attendu.');
+            }
+            if (!client.id || !client.name) {
+                throw new Error('[contextManager] Client invalide : ID et nom obligatoires.');
+            }
         };
-  
-        console.log('👤 [contextManager] MAJ client:', {
-          ancien: currentContext.lastClient?.name,
-          nouveau: clientInfo.name,
-          zone: clientInfo.zone
-        });
-  
-        updates.lastClient = clientInfo;
-        updates.clientHistory = [
-          ...(currentContext.clientHistory || []),
-          {
-            id: clientInfo.id,
-            nom: clientInfo.name,
-            zone: clientInfo.zone,
-            timestamp: new Date().toISOString()
-          }
-        ].slice(-5);
-      }
-  
-      if (updates.lastDelivery) {
-        console.log('📦 [contextManager] MAJ livraison entrée:', updates.lastDelivery);
-  
-        updates.lastDelivery = {
-          status: updates.lastDelivery.status || 'SUCCESS',
-          livraison_id: updates.lastDelivery.livraison_id,
-          total: updates.lastDelivery.total,
-          details: updates.lastDelivery.details,
-          client: {
-            name: updates.lastDelivery.client?.name,
-            zone: updates.lastDelivery.client?.zone
-          }
+
+        const validateDelivery = (delivery) => {
+            if (!delivery || typeof delivery !== 'object') {
+                throw new Error('[contextManager] Livraison invalide : objet attendu.');
+            }
+            if (!delivery.id || typeof delivery.total !== 'number') {
+                throw new Error('[contextManager] Livraison invalide : ID et total obligatoires.');
+            }
         };
-  
-        console.log('📦 [contextManager] MAJ livraison formatée:', updates.lastDelivery);
-      }
-  
-      const updatedContext = {
-        ...currentContext,
-        ...updates,
-        lastUpdate: new Date().toISOString()
-      };
-  
-      ContextManager.conversationCache.set(userId, updatedContext);
-      console.log('✅ [contextManager] Contexte mis à jour:', updatedContext);
-  
-      return updatedContext;
+
+        // ✅ Validation des mises à jour
+        if (updates.lastClient) validateClient(updates.lastClient);
+        if (updates.lastDelivery) validateDelivery(updates.lastDelivery);
+
+        // 🔍 Récupération du contexte existant
+        const currentContext = await this.getConversationContext(userId);
+
+        // ✅ Mise à jour du client
+        if (updates.lastClient) {
+            console.log('🔄 Vérification lastClient avant MAJ contexte:', updates.lastClient);
+
+            if (!updates.lastClient.id || !updates.lastClient.name) {
+                console.warn('⚠️ [contextManager] Données client incomplètes avant MAJ:', updates.lastClient);
+            }
+
+            updates.lastClient = {
+                name: updates.lastClient.name || updates.lastClient.Nom_Client || 'Client inconnu',
+                zone: updates.lastClient.zone || updates.lastClient.Zone || 'Zone inconnue',
+                id: updates.lastClient.id || updates.lastClient.ID_Client || 'ID inconnu'
+            };
+
+            console.log('👤 [contextManager] MAJ client FINALE:', updates.lastClient);
+
+            updates.clientHistory = [
+                ...(currentContext.clientHistory || []),
+                {
+                    id: updates.lastClient.id,
+                    nom: updates.lastClient.name,
+                    zone: updates.lastClient.zone,
+                    timestamp: new Date().toISOString()
+                }
+            ].slice(-5);
+        }
+
+        // ✅ Mise à jour de la livraison
+        if (updates.lastDelivery) {
+            console.log('📦 Vérification lastDelivery avant MAJ:', updates.lastDelivery);
+
+            updates.lastDelivery = {
+                status: updates.lastDelivery.status || 'SUCCESS',
+                livraison_id: updates.lastDelivery.id || 'ID inconnu',
+                total: updates.lastDelivery.total || 0,
+                details: updates.lastDelivery.details || [],
+                client: updates.lastDelivery.client || { name: 'Client inconnu', zone: 'Zone inconnue' }
+            };
+
+            console.log('📦 [contextManager] MAJ livraison FINALE:', updates.lastDelivery);
+        }
+
+        // ✅ Vérification des valeurs undefined avant mise à jour
+        if (!updates || typeof updates !== 'object') {
+            console.error('🚨 [contextManager] Erreur: updates est undefined ou non valide:', updates);
+            throw new Error('updates est undefined');
+        }
+
+        if (updates.lastClient && (!updates.lastClient.id || !updates.lastClient.name)) {
+            console.warn('⚠️ [contextManager] Données client incomplètes:', updates.lastClient);
+        }
+
+        if (updates.lastDelivery && (!updates.lastDelivery.id || !updates.lastDelivery.total)) {
+            console.warn('⚠️ [contextManager] Données livraison incomplètes:', updates.lastDelivery);
+        }
+
+        // ✅ Mise à jour du contexte
+        const updatedContext = {
+            ...currentContext,
+            ...updates,
+            lastUpdate: new Date().toISOString()
+        };
+
+        // 🛠 DEBUG : Vérifier ce qui est stocké avant de retourner
+        console.log('🛠 [DEBUG] Contexte final avant retour:', JSON.stringify(updatedContext, null, 2));
+
+        // ✅ Stockage dans le cache
+        ContextManager.conversationCache.set(userId, updatedContext);
+        console.log('🔄 [DEBUG] Contexte cache après mise à jour:', ContextManager.conversationCache.get(userId));
+
+        // ✅ Vérification finale
+        console.log('✅ [contextManager] Contexte mis à jour avec succès:', updatedContext);
+
+        return updatedContext;  // 🔴 AJOUT DU RETOUR EXPLICITE ICI
+
     } catch (error) {
-      console.error('❌ [contextManager] Erreur mise à jour contexte:', {
-        userId,
-        updates,
-        error: error.message
-      });
-      throw error;
+        console.error('❌ [contextManager] Erreur critique:', {
+            userId,
+            updates,
+            error: error.message
+        });
+        throw error;
     }
-  }
+}
 
   async enrichContext(userId, type, data) {
     try {
@@ -195,8 +235,7 @@ class ContextManager {
             zone: data.client.zone || data.client.Zone,
             id: data.client.id || data.client.ID_Client,
             DEFAULT: data.client.DEFAULT,
-            odooId: data.client.odooId || data.client.odoo_id, // Ajout de l'ID Odoo
-            availableZones: data.client.availableZones || []
+            odooId: data.client.odooId || data.client.odoo_id
           };
   
           console.log('👤 [contextManager] MAJ info client:', {
@@ -316,7 +355,6 @@ class ContextManager {
     }
   }
   
-  // Nouvelle méthode helper pour la validation
   validateContext(context) {
     if (!context) return false;
     
@@ -417,6 +455,55 @@ class ContextManager {
     console.log(`✅ [contextManager] Cache mis à jour pour le client: ${client.ID_Client}`);
   }
   
+  async updateContext(userId, result) {
+    try {
+        if (!userId || result?.status === 'ERROR') return null; // ✅ Évite d'aller plus loin en cas d'erreur
+
+        const contextUpdate = {};
+
+        // 📝 Mise à jour du dernier client
+        if (result.client) {
+            contextUpdate.lastClient = {
+                name: result.client.Nom_Client || result.client.name,
+                id: result.client.ID_Client || result.client.id,
+                zone: result.client.Zone || result.client.zone
+            };
+        }
+
+        // 📦 Mise à jour de la dernière livraison
+        if (result.livraison) {
+            contextUpdate.lastDelivery = {
+                id: result.livraison.id,
+                odoo_id: result.livraison.odoo_id,
+                total: result.livraison.total,
+                details: result.livraison.details,
+                client: result.livraison.client || result.client
+            };
+        }
+
+        console.log('📝 [contextManager] Mise à jour contexte:', contextUpdate);
+
+        if (Object.keys(contextUpdate).length > 0) {
+            console.log('🛠 [DEBUG] Contexte avant updateConversationContext:', contextUpdate);
+            const updatedContext = await contextManager.updateConversationContext(userId, contextUpdate);
+
+            if (!updatedContext) {
+                console.error("🚨 [contextManager] ERREUR: updateConversationContext a retourné undefined !");
+                return contextUpdate; // ✅ Retourne au moins les données mises à jour
+            }
+
+            console.log('🛠 [DEBUG] Contexte mis à jour:', updatedContext);
+            return updatedContext; // ✅ Toujours retourner un objet valide
+        } else {
+            console.warn('⚠️ [contextManager] Aucune mise à jour nécessaire pour le contexte.');
+            return {}; // ✅ Retourne un objet vide au lieu de `undefined`
+        }
+    } catch (error) {
+        console.error('❌ [contextManager] Erreur mise à jour contexte:', error.message);
+        return { error: error.message }; // ✅ Retourne un objet même en cas d'erreur
+    }
+}
+
 
   static getCacheStatus() {
     return cacheManager.getCacheStatus();
@@ -441,7 +528,6 @@ class ContextManager {
     }
   }
   
-
   hasActiveContext(userId) {
     validateUserId(userId); // Ajout de la validation
     return ContextManager.conversationCache.has(userId);

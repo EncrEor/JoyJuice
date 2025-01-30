@@ -10,6 +10,7 @@ const auth = new google.auth.GoogleAuth({
 });
 const sheets = google.sheets({ version: 'v4', auth });
 const spreadsheetId = process.env.SPREADSHEET_ID;
+const { validateResponse } = require('./claude/utils/responseUtils');
 
 // On importe la logique de format pour les livraisons
 const {
@@ -230,15 +231,25 @@ module.exports.getLivraisonsByClientCurrentMonth = async (clientId) => {
  */
 module.exports.addLivraison = async (livraisonData) => {
   try {
-    console.log('Début du traitement de la nouvelle livraison:', livraisonData);
-    
+    console.log('📦 [addLivraison] Début du traitement de la livraison:', JSON.stringify(livraisonData, null, 2));
+
+    // Vérification si les données sont valides
+    if (!livraisonData || typeof livraisonData !== 'object') {
+      console.error('🚨 [Erreur critique] Données de livraison invalides ou manquantes:', livraisonData);
+      throw new Error('Les données de la livraison sont invalides ou manquantes.');
+    }
+
+    // Détection du format
     const isNewFormat = 'clientName' in livraisonData;
-    console.log('📝 [livraisonsService] Format détecté:', isNewFormat ? 'nouveau' : 'ancien');
-    this.validateLivraisonData(livraisonData);
+    console.log(`📝 [livraisonsService] Format détecté: ${isNewFormat ? 'nouveau' : 'ancien'}`);
+
+    console.log('🛠 [DEBUG] Données de livraison AVANT validation:', JSON.stringify(livraisonData, null, 2));
+    this.validateLivraisonData(livraisonData); // Validation des données
 
     if (isNewFormat) {
       console.log('📝 [livraisonsService] Format détecté: nouveau');
-      
+
+      // Traitement du format "nouveau"
       const formattedResult = await handleNewFormatLivraison(
         livraisonData,
         this.generateLivraisonId,
@@ -246,16 +257,36 @@ module.exports.addLivraison = async (livraisonData) => {
         spreadsheetId
       );
 
-      console.log('✅ [livraisonsService] Résultat brut:', formattedResult); // Vérifie la structure du résultat avant de le retourner
+      console.log('✅ [DEBUG] Résultat après traitement handleNewFormatLivraison:', JSON.stringify(formattedResult, null, 2));
 
-      return formattedResult; // Retourne le résultat brut directement
-      
+      if (!formattedResult) {
+        console.error('🚨 [Erreur critique] handleNewFormatLivraison a retourné undefined ou null !');
+        throw new Error('Le traitement de la nouvelle livraison a échoué (résultat vide).');
+      }
+
+      console.log('✅ [livraisonsService] Livraison traitée avec succès (nouveau format).');
+      console.log("📤 [DEBUG] Avant validation de addLivraison:", JSON.stringify(formattedResult, null, 2));
+return validateResponse(formattedResult);
+
     } else {
-      return await handleOldFormatLivraison(livraisonData, sheets, spreadsheetId);
+      console.log('📝 [livraisonsService] Format détecté: ancien');
+
+      // Traitement du format "ancien"
+      const oldResult = await handleOldFormatLivraison(livraisonData, sheets, spreadsheetId);
+
+      console.log('✅ [DEBUG] Résultat après traitement handleOldFormatLivraison:', JSON.stringify(oldResult, null, 2));
+
+      if (!oldResult) {
+        console.error('🚨 [Erreur critique] handleOldFormatLivraison a retourné undefined ou null !');
+        throw new Error('Le traitement de l’ancienne livraison a échoué (résultat vide).');
+      }
+
+      console.log('✅ [livraisonsService] Livraison traitée avec succès (ancien format).');
+      return oldResult;
     }
 
   } catch (error) {
-    console.error('Erreur lors de la création de la livraison:', error);
+    console.error('❌ [Erreur] Échec de la création de la livraison:', error.message);
     throw new Error(`Erreur lors de la création de la livraison: ${error.message}`);
   }
 };

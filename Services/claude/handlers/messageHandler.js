@@ -1,3 +1,5 @@
+//Services/claude/handlers/messageHandler.js
+
 const StringUtils = require('../utils/stringUtils');
 const ErrorUtils = require('../utils/errorUtils');
 const clientHandler = require('./clientHandler');
@@ -15,7 +17,12 @@ class MessageHandler {
   
       // 1) Récupération du contexte
       const context = await contextManager.getConversationContext(userId);
-  
+      console.log('🔍 [DEBUG] Contexte récupéré après mise à jour:', context);
+      if (!context) {
+        console.error('❌ [Erreur critique] getConversationContext() a retourné undefined !');
+      }
+
+
       // 2) Analyse de l’intention
       const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message, context);
   
@@ -43,12 +50,15 @@ class MessageHandler {
       };
   
       // 5) Mettre à jour le contexte (si nécessaire)
-      await this.updateContext(userId, analysis, enrichedResult);
+      await contextManager.updateContext(userId, result);
   
       // 6) Générer la réponse finalisée via naturalResponder
       const response = await naturalResponder.generateResponse(analysis, enrichedResult);
   
       // 7) Formater et retourner la réponse finale
+      if (!response) {
+        console.error('❌ [messageHandler] Erreur critique: response est undefined avant formatFinalResponse');
+      }
       return this.formatFinalResponse(response, context);
   
     } catch (error) {
@@ -64,23 +74,6 @@ class MessageHandler {
     }
   }
 
-  async updateContext(userId, analysis, result) {
-    if (result.status === 'SUCCESS') {
-      const contextUpdate = {};
-
-      if (result.client) {
-        contextUpdate.lastClient = result.client;
-      }
-
-      if (result.livraison) {
-        contextUpdate.lastDelivery = result.livraison;
-      }
-
-      if (Object.keys(contextUpdate).length) {
-        await contextManager.updateConversationContext(userId, contextUpdate);
-      }
-    }
-  }
 
   formatResponse(result) {
     const baseResponse = {
@@ -122,6 +115,16 @@ class MessageHandler {
       console.warn('⚠️ Réponse sans message:', response);
     }
     
+    if (!response) {
+      console.error('❌ [messageHandler] Erreur critique: response est undefined dans formatFinalResponse');
+      return {
+        success: false,
+        message: 'Erreur inconnue',
+        data: null,
+        timestamp: new Date().toISOString()
+      };
+    }
+
     return {
       success: !response.error,
       message: response?.message || 'Une erreur est survenue', // Ajout d'un message par défaut ici
