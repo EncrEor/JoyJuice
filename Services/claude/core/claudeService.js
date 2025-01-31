@@ -1,19 +1,17 @@
 // Services/claude/claudeService.js
 
-const { Anthropic } = require('@anthropic-ai/sdk');
+const path = require('path');
+const claudeConfig = require(path.resolve(__dirname, '../../../config/claudeConfig'));
 const { formatFinalResponse } = require('../utils/responseUtils');
+const ErrorUtils = require('../utils/errorUtils');
 const contextManager = require('./contextManager');
 const intentAnalyzer = require('./intentAnalyzer');
-const naturalResponder = require('./naturalResponder');
-const ErrorUtils = require('../utils/errorUtils');
 const clientLookupService = require('../../clientLookupService');
-const contextResolver = require('./contextResolver');
 const clientHandler = require('../handlers/clientHandler');
 const cacheManager = require('./cacheManager/cacheIndex');
 const indexManager = require('./indexManager');
 const deliveryHandler = require('../handlers/deliveryHandler');
-const path = require('path');
-const claudeConfig = require(path.resolve(__dirname, '../../../config/claudeConfig'));
+
 
 class ClaudeService {
   constructor() {
@@ -64,34 +62,53 @@ class ClaudeService {
     try {
       console.log(`📩 Message reçu de ${userId}:`, message);
 
+      // 1. Récupération contexte
       const context = await contextManager.getConversationContext(userId);
-      const analysis = await this.retryRequest(() =>
-        intentAnalyzer.analyzeContextualMessage(userId, message, context)
-      );
+      console.log('🔍 [DEBUG] Contexte récupéré:', context);
 
-      // Exécution avec conservation du contexte original 
+      if (!context) {
+        throw new Error('[claudeService] Contexte non disponible');
+      }
+
+      // 2. Analyse avec conservation du contexte
+      const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message, context);
+
+      // 3. Exécution de l'action
       const actionResult = await this.executeAction(analysis, context);
 
-      // Enrichissement du résultat avec infos essentielles
+      // 4. Enrichissement du résultat avec infos essentielles
       const enrichedResult = {
         ...actionResult,
         type: analysis.type || actionResult.type,
-        analysis: analysis, // Préservation de l'analyse originale
+        analysis: analysis,
         client: actionResult.client || analysis.client,
         context: context
       };
 
-      // Mise à jour du contexte
-      await contextManager.updateContext(userId, result);
+      // 5. Génération réponse finale via responseUtils
+      const finalResponse = await formatFinalResponse(enrichedResult, context);
+      console.log('📤 [claudeService] Réponse finale formatée:', finalResponse);
 
-      // Génération de la réponse avec données complètes
-      const response = await naturalResponder.generateResponse(analysis, enrichedResult);
+      // 6. Mise à jour du contexte avec la réponse formatée
+      await contextManager.updateContext(userId, finalResponse);
+      console.log('🔍 [claudeService] POST updateContext');
 
-      return formatFinalResponse(response, context);
+      // 7. Log et retour
+      console.log('🔍 [claudeService] Réponse avant retour:', finalResponse);
+      return finalResponse;
+
 
     } catch (error) {
-      console.error('❌ Erreur processMessage:', error);
-      return this.handleError(error);
+      console.error('❌ [claudeService] Erreur processMessage:', error);
+
+      const { formatFinalResponse } = require('./utils/responseUtils');
+      return formatFinalResponse({
+        type: 'ERROR',
+        error: {
+          code: error.code || 'PROCESS_ERROR',
+          message: error.message
+        }
+      });
     }
   }
 

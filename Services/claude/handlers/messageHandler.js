@@ -1,114 +1,48 @@
 //Services/claude/handlers/messageHandler.js
 
-const StringUtils = require('../utils/stringUtils');
+const { ResponseTypes, formatFinalResponse } = require('../utils/responseUtils');
 const ErrorUtils = require('../utils/errorUtils');
-const clientHandler = require('./clientHandler');
-const deliveryHandler = require('./deliveryHandler');
 const contextManager = require('../core/contextManager');
-const intentAnalyzer = require('../core/intentAnalyzer');
-const { formatFinalResponse } = require('../utils/responseUtils');
+const claudeService = require('../core/claudeService');
 
 class MessageHandler {
-  
-
   async processMessage(userId, message) {
     try {
-      console.log(`📥 Message reçu de l'utilisateur ${userId}:`, message);
+      console.log(`📥 [messageHandler] Message reçu de l'utilisateur ${userId}:`, message);
   
       // 1) Récupération du contexte
       const context = await contextManager.getConversationContext(userId);
-      console.log('🔍 [DEBUG] Contexte récupéré après mise à jour:', context);
+      console.log('🔍 [messageHandler] Contexte récupéré:', context);
+      
       if (!context) {
-        console.error('❌ [Erreur critique] getConversationContext() a retourné undefined !');
+        throw new Error('[messageHandler] Contexte non disponible');
       }
 
+      // 2) Délégation à claudeService pour l'analyse et l'exécution
+      const result = await claudeService.processMessage(userId, message);
+      console.log('📝 [messageHandler] Résultat claudeService:', result);
 
-      // 2) Analyse de l’intention
-      const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message, context);
-  
-      // On s'assure de stocker le userId dans l'analyse (si besoin plus tard)
-      analysis.userId = userId;
-  
-      console.log('🔍 [MessageHandler] Analyse obtenue:', analysis);
-  
-      // Vérification basique (peut être adaptée)
-      if (!analysis.type) {
-        throw new Error('[MessageHandler] Aucune intention détectée dans l’analyse.');
+      // 3) Vérification de la réponse
+      if (!result) {
+        throw new Error('[messageHandler] Réponse vide de claudeService');
       }
-  
-      // 3) Exécuter l’action en fonction de l’intention
-      const actionResult = await claudeService.executeAction(analysis, context);
-  
-      // 4) Combiner le résultat avec l’analyse/contexte
-      const enrichedResult = {
-        ...actionResult,
-        // On force le type si absent
-        type: analysis.type || actionResult.type,
-        analysis,               // Pour conserver l’analyse initiale
-        client: actionResult.client || analysis.client,
-        context
-      };
-  
-       // 5) Mettre à jour le contexte
-    await contextManager.updateContext(userId, enrichedResult);  //enriched ajouté
-  
-      // 6) Générer la réponse finalisée via naturalResponder
-      const response = await naturalResponder.generateResponse(analysis, enrichedResult);
-  
-      // 7) Formater et retourner la réponse finale
-      if (!response) {
-        console.error('❌ [messageHandler] Erreur critique: response est undefined avant formatFinalResponse');
-      }
-      return formatFinalResponse(response, context);
-  
+
+      // 4) Formatage final via responseUtils
+      console.log('📤 [messageHandler] Formatage réponse finale...');
+      return await formatFinalResponse(result, context);
+
     } catch (error) {
-      console.error('❌ [MessageHandler] Erreur processMessage:', error);
-  
-      // Exemple de format d'erreur à renvoyer
-      return {
-        success: false,
-        message: error.message || 'Erreur interne',
-        code: error.code || 'INTERNAL_ERROR',
-        timestamp: new Date().toISOString()
-      };
+      console.error('❌ [messageHandler] Erreur processMessage:', error);
+      return formatFinalResponse({
+        type: ResponseTypes.ERROR,
+        error: {
+          code: error.code || 'PROCESS_ERROR',
+          message: error.message || 'Erreur lors du traitement du message',
+          details: error.stack
+        }
+      });
     }
   }
-
-
-  formatResponse(result) {
-    const baseResponse = {
-      success: result.status === 'SUCCESS',
-      timestamp: new Date().toISOString()
-    };
-
-    if (result.status === 'NEED_ZONE') {
-      return {
-        ...baseResponse,
-        message: result.message,
-        data: {
-          type: 'zone_selection',
-          matches: result.matches
-        }
-      };
-    }
-
-    if (result.status === 'SUCCESS') {
-      return {
-        ...baseResponse,
-        data: {
-          type: result.type,
-          result: result.data
-        }
-      };
-    }
-
-    return {
-      ...baseResponse,
-      success: false,
-      error: result.message || 'Erreur inconnue'
-    };
-  }
-
 
   isConversationalMessage(message) {
     const conversationalPatterns = [
@@ -116,7 +50,6 @@ class MessageHandler {
       /^merci/i,
       /comment ça va/i
     ];
-
     return conversationalPatterns.some(pattern => pattern.test(message));
   }
 }

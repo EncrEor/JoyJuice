@@ -3,32 +3,134 @@ const express = require('express');
 const router = express.Router();
 const claudeService = require('../Services/claude/core/claudeService');
 
-router.post('/', async (req, res) => {
-  try {
-    const { message, userId } = req.body;
-    
-    if (!message || !userId) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Message et userId requis' 
-      });
+/**
+ * Formate la réponse pour le client
+ * @param {Object} response - Réponse du service
+ * @returns {Object} Réponse formatée
+ */
+function formatResponse(response) {
+    // Si la réponse est déjà formatée par responseUtils
+    if (response?.data?.type) {
+        return response;
     }
 
-    //console.log('Message reçu de l\'utilisateur', userId, ':', message);
-    const response = await claudeService.processMessage(userId, message);
+    // Si la réponse est une livraison réussie
+    if (response?.type === 'DELIVERY' && response?.status === 'SUCCESS') {
+        return {
+            success: true,
+            data: {
+                type: 'DELIVERY',
+                message: response.message || response.livraison?.message,
+                livraison: {
+                    id: response.livraison?.id,
+                    total: response.livraison?.total,
+                    details: response.livraison?.details
+                },
+                client: {
+                    name: response.client?.name,
+                    zone: response.client?.zone
+                }
+            }
+        };
+    }
+
+    // Format par défaut pour les erreurs
+    if (response?.status === 'ERROR' || response?.type === 'ERROR') {
+        return {
+            success: false,
+            data: {
+                type: 'ERROR',
+                message: response.message || 'Une erreur est survenue',
+                error: {
+                    code: response.error?.code || 'UNKNOWN_ERROR',
+                    details: response.error?.details
+                }
+            }
+        };
+    }
+
+    // Format par défaut
+    return {
+        success: true,
+        data: {
+            type: response?.type || 'RESPONSE',
+            message: response?.message,
+            details: response?.details || response
+        }
+    };
+}
+
+/**
+ * Validation des données d'entrée
+ * @param {Object} data - Données à valider
+ * @returns {Object} Résultat de la validation
+ */
+function validateInput(data) {
+    const errors = [];
     
-    res.status(200).json({
-      success: true,
-      data: response
-    });
+    if (!data.message?.trim()) {
+        errors.push('Message requis');
+    }
     
-  } catch (error) {
-    console.error('Erreur lors du traitement du message:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+    if (!data.userId) {
+        errors.push('UserId requis');
+    }
+
+    return {
+        isValid: errors.length === 0,
+        errors
+    };
+}
+
+router.post('/', async (req, res) => {
+    try {
+        // 1. Validation des données d'entrée
+        const { message, userId } = req.body;
+        const validation = validateInput({ message, userId });
+        
+        if (!validation.isValid) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Données invalides',
+                    details: validation.errors
+                }
+            });
+        }
+
+        // 2. Traitement du message
+        console.log(`📩 Message reçu de ${userId}: ${message}`);
+        const response = await claudeService.processMessage(userId, message);
+
+        // 3. Formatage et envoi de la réponse
+        const formattedResponse = formatResponse(response);
+        
+        // Log de debug
+        console.log('📤 Réponse formatée:', JSON.stringify(formattedResponse, null, 2));
+
+        return res.status(200).json(formattedResponse);
+
+    } catch (error) {
+        console.error('❌ Erreur lors du traitement du message:', {
+            error: error.message,
+            stack: error.stack
+        });
+
+        // 4. Gestion structurée des erreurs
+        return res.status(500).json({
+            success: false,
+            data: {
+                success: false,
+                message: 'Erreur lors du traitement de la demande',
+                error: {
+                    message: error.message || 'Erreur interne',
+                    code: error.code || 'INTERNAL_ERROR',
+                    timestamp: new Date().toISOString(),
+                    details: process.env.NODE_ENV === 'development' ? error.stack : null
+                }
+            }
+        });
+    }
 });
 
 module.exports = router;
