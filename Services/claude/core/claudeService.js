@@ -64,7 +64,7 @@ class ClaudeService {
 
       // 1. Récupération contexte
       const context = await contextManager.getConversationContext(userId);
-      console.log('🔍 [DEBUG] Contexte récupéré:', context);
+      console.log('🔍 [claudeService] Contexte récupéré:', context);
 
       if (!context) {
         throw new Error('[claudeService] Contexte non disponible');
@@ -91,10 +91,10 @@ class ClaudeService {
 
       // 6. Mise à jour du contexte avec la réponse formatée
       await contextManager.updateContext(userId, finalResponse);
-      console.log('🔍 [claudeService] POST updateContext');
+      //console.log('🔍 [claudeService] POST updateContext');
 
       // 7. Log et retour
-      console.log('🔍 [claudeService] Réponse avant retour:', finalResponse);
+      // console.log('🔍 [claudeService] Réponse avant retour:', finalResponse);
       return finalResponse;
 
 
@@ -204,11 +204,11 @@ class ClaudeService {
               }))
             };
 
-            console.log('🔄 (claudeService) DeliveryData préparées:', deliveryData);
+            console.log('🔄 (claudeService) DeliveryData préparées:'); //, deliveryData);
 
             // Création livraison
             const result = await deliveryHandler.createDelivery(analysis.userId, deliveryData);
-            console.log('📦 (claudeService) Résultat brut deliveryHandler:', JSON.stringify(result, null, 2));
+            //console.log('📦 (claudeService) Résultat brut deliveryHandler:', JSON.stringify(result, null, 2));
 
             // Validation résultat
             if (!result.success || !result.livraison || !result.client) {

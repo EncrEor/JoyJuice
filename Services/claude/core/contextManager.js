@@ -68,7 +68,7 @@ class ContextManager {
         ContextManager.conversationCache.set(userId, context);
       }
 
-      console.log(`✅ [contextManager] Contexte: ${JSON.stringify(context, null, 2)}`);
+      //console.log(`✅ [contextManager] Contexte: ${JSON.stringify(context, null, 2)}`);
       return context;
 
     } catch (error) {

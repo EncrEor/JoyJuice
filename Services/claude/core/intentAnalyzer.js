@@ -64,17 +64,17 @@ class IntentionAnalyzer {
   async analyzeContextualMessage(userId, message) {
     try {
       console.log('📥 [intentAnalyzer] Analyse message:', { userId, message: message.slice(0, 100) });
-      
+
       if (!userId || !message?.trim()) {
         throw ErrorUtils.createError('Paramètres invalides', 'INVALID_PARAMS');
       }
-  
+
       const context = await contextManager.getConversationContext(userId);
       //console.log('📑 [intentAnalyzer] Contexte récupéré:', {
       //  hasLastClient: !!context?.lastClient,
       //  hasLastAnalysis: !!context?.lastAnalysisResult
       //});
-  
+
       // Enrichissement contexte avec produits
       try {
         const cacheStore = await cacheManager.getCacheStoreInstance();
@@ -88,31 +88,31 @@ class IntentionAnalyzer {
       } catch (cacheError) {
         console.error('❌ Erreur cache:', cacheError);
       }
-  
+
       // Détection du type
       const messageType = this.detectMessageType(message);
       console.log('🎯 [intentAnalyzer] Type détecté:', messageType);
-  
+
       // Traitement selon type
-      switch(messageType) {
-        case 'DEMANDE_INFO': 
+      switch (messageType) {
+        case 'DEMANDE_INFO':
           return await messageHandler.processMessage(userId, message);
-        
+
         case 'CONVERSATION':
           return {
             type: 'CONVERSATION',
             intention_details: await naturalResponder.generateResponse({ message, context })
           };
-  
+
         default: { // DELIVERY par défaut
           const deliveryAnalyzer = new DeliveryAnalyzer(context);
           await deliveryAnalyzer.initialize();
           const result = await deliveryAnalyzer.analyzeMessage(message);
-console.log("📤 [DEBUG] Avant validation de intentAnalyzer:", JSON.stringify(result, null, 2));
-return validateResponse(result);
+          //console.log("📤 [DEBUG] Avant validation de intentAnalyzer:", JSON.stringify(result, null, 2));
+          return validateResponse(result);
         }
       }
-  
+
     } catch (error) {
       console.error('❌ [intentAnalyzer] Erreur analyse:', error);
       return {
@@ -121,32 +121,32 @@ return validateResponse(result);
       };
     }
   }
-  
+
   detectMessageType(message) {
     const firstLine = message.toLowerCase().trim().split('\n')[0];
-    
+
     if (/^(?:info|solde|tel|adresse|status|combien)\b/.test(firstLine)) {
       return 'DEMANDE_INFO';
     }
-    
+
     if (/^(?:bonjour|merci|au revoir|ok|oui|non)\b/.test(firstLine)) {
       return 'CONVERSATION';
     }
-  
+
     return 'DELIVERY';
   }
 
   async retryClaudeCall(enrichedMessage) {
     try {
-        console.log('🔄 [intentAnalyzer] Appel Claude via client');
-        return await claudeClient.call(enrichedMessage, 'analysis', {
-            systemPrompt: this.systemPrompt
-        });
+      console.log('🔄 [intentAnalyzer] Appel Claude via client');
+      return await claudeClient.call(enrichedMessage, 'analysis', {
+        systemPrompt: this.systemPrompt
+      });
     } catch (error) {
-        console.error('❌ [intentAnalyzer] Erreur appel Claude:', error);
-        throw error;
+      console.error('❌ [intentAnalyzer] Erreur appel Claude:', error);
+      throw error;
     }
-}
+  }
 
   async validateAndEnrichAnalysis(analysis) {
     try {
@@ -161,7 +161,7 @@ return validateResponse(result);
           lastClient: analysis.currentContext?.lastClient,
           lastDelivery: analysis.currentContext?.lastDelivery
         });
-        
+
         await deliveryAnalyzer.initialize();
         return {
           type: 'DELIVERY',
@@ -196,15 +196,15 @@ return validateResponse(result);
   }
 
   isDeliveryIntent(analysis) {
-    const isDelivery = analysis.type === 'DELIVERY' ||  
+    const isDelivery = analysis.type === 'DELIVERY' ||
       /[0-9]+\s+(?:citron|mangue|fraise|mg)/i.test(analysis.message);
-  
+
     console.log('🔍 Test pattern livraison:', {
       message: analysis.message,
       isDelivery,
       type: analysis.type
     });
-  
+
     return isDelivery;
   }
 
@@ -305,11 +305,11 @@ return validateResponse(result);
 
   buildContextualMessage(message, context) {
     let enrichedMessage = `Message à analyser:\n${message}\n\nContexte actuel:\n`;
-  
+
     if (context.lastClient) {
       enrichedMessage += `- Dernier client mentionné: ${context.lastClient.Nom_Client} (${context.lastClient.zone || 'pas de zone'})\n`;
     }
-  
+
     if (context.lastDelivery) {
       enrichedMessage += `- Dernière livraison: ${context.lastDelivery.ID_Livraison}\n`;
       enrichedMessage += `- Produits de la dernière livraison:\n`;
@@ -317,23 +317,23 @@ return validateResponse(result);
         enrichedMessage += `  * ${detail.quantite} ${detail.nom_produit}\n`;
       });
     }
-  
+
     if (context.recentProducts?.size > 0) {
       enrichedMessage += `- Produits récemment mentionnés: ${Array.from(context.recentProducts).join(', ')}\n`;
     }
-  
+
     if (context.products) {
       const productList = Object.values(context.products.byId || {})
         .map(product => product.Nom_Produit)
         .join(', ');
       enrichedMessage += `- Liste des produits disponibles: ${productList}\n`;
     }
-  
+
     enrichedMessage += `\nMerci d'analyser ce message pour en extraire :
     - La première ligne contient le nom du client
     - Les lignes suivantes contiennent les quantités de produits
     - Des suffixes peuvent être présents (5L, 25CL, S) et doivent être traités comme modificateurs\n`;
-  
+
     console.log('📝 [intentAnalyzer] Message enrichi pour Claude:', enrichedMessage);
     return enrichedMessage;
   }

@@ -57,27 +57,27 @@ class ProduitsService {
     try {
       console.log('🔍 [produitsService] Récupération des données produits...');
       const values = await googleSheets.getValue(this.sheetRange);
-      
+
       // Debug structure données reçues
-      console.log('📊 [produitsService] Structure données brutes:', {
-        colonnes: values[0], // en-têtes
-        exemple: values[1],  // premier produit
-        total: values.length
-      });
-  
+      // console.log('📊 [produitsService] Structure données brutes:', {
+      //  colonnes: values[0], // en-têtes
+      //   exemple: values[1],  // premier produit
+      //   total: values.length
+      // });
+
       if (!values || values.length <= 1) return [];
-  
+
       const produits = values.slice(1).map(row => {
         const produit = this.mapRowToProduit(row);
         // Debug mapping
         //console.log('🔄 [produitsService] Mapping produit:', {
         //  ID_Produit: produit.ID_Produit,
-       //   P_IDODOO: produit.P_IDODOO,
-       //   raw: row
-       // });
+        //   P_IDODOO: produit.P_IDODOO,
+        //   raw: row
+        // });
         return produit;
       });
-  
+
       return produits;
     } catch (error) {
       console.error('❌ [produitsService] Erreur récupération produits:', error);
@@ -89,27 +89,27 @@ class ProduitsService {
     try {
       console.log(`🔍 [produitsService] Résolution ID Odoo pour produit: ${productId}`);
       const produits = await this.getProduitsData();
-  
+
       // Extraction de la colonne ID_Produit des données 
       console.log('📊 Produits chargés:', produits.map(p => ({
         id: p.ID_Produit,
         nom: p.Nom_Produit,
         odooId: p.P_IDODOO
       })));
-  
+
       // Recherche du produit par ID
       const produit = produits.find(p => p.ID_Produit === productId);
       if (!produit) {
         throw new Error(`Produit ${productId} non trouvé`);
       }
-  
+
       if (!produit.P_IDODOO) {
         throw new Error(`[produitsService] ID Odoo manquant pour ${productId}`);
       }
-  
+
       console.log(`✅ [produitsService] ID Odoo trouvé pour ${productId}:`, produit.P_IDODOO);
       return parseInt(produit.P_IDODOO);
-  
+
     } catch (error) {
       console.error(`❌ [produitsService] Erreur récupération ID Odoo:`, {
         produitId: productId,

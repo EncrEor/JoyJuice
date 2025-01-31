@@ -117,27 +117,27 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
         });
       }
 
-      // 7. Retour du résultat global
-      const result = {
-        success: true,
-        status: 'SUCCESS',
-        type: 'DELIVERY',
-        client: {
-          Nom_Client: livraisonData.clientName,  
-          Zone: livraisonData.zone,
-          ID_Client: livraisonData.clientId
-        },
-        livraison: {
-          id: newLivraisonId,
-          odoo_id: odooResult.orderId,
-          total: odooResult.total,
-          details: details
-        },
-        message: `Livraison ${newLivraisonId} créée avec succès pour ${livraisonData.clientName}`
-      };
-      
-      console.log('[livraisonsFormat] Retour structuré:', result);
-      return result;
+// 7. Retour du résultat global
+const result = {
+  success: true,
+  status: 'SUCCESS',
+  type: 'DELIVERY',
+  client: {
+    Nom_Client: livraisonData.clientName,  
+    Zone: livraisonData.zone,
+    ID_Client: livraisonData.clientId
+  },
+  livraison: {
+    id: newLivraisonId,
+    odoo_id: odooResult.orderId,
+    total: odooResult.total,
+    details: details
+  },
+  message: `${livraisonData.clientName}\nTTC: ${odooResult.total}DNT (C-${odooResult.orderId})\n${details.map(d => `${d.Quantite} ${d.ID_Produit}`).join(', ')}`
+};
+
+console.log('[livraisonsFormat] Retour structuré:', result);
+return result;
 
     } catch (sheetsError) {
       console.error('[livraisonsFormat] Erreur Google Sheets:', sheetsError);

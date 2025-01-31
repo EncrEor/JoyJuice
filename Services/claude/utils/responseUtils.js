@@ -176,7 +176,7 @@ const ResponseTypes = {
               message: formattedResponse.data.message.slice(0, 100) // Limite la longueur du log
           });
   
-          logger('info', '📤 [responseUtils] Format final:', JSON.stringify(formattedResponse, null, 2));
+          //logger('info', '📤 [responseUtils] Format final:', JSON.stringify(formattedResponse, null, 2));
           return formattedResponse;
       
         } catch (error) {

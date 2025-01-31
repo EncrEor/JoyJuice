@@ -231,7 +231,7 @@ module.exports.getLivraisonsByClientCurrentMonth = async (clientId) => {
  */
 module.exports.addLivraison = async (livraisonData) => {
   try {
-    console.log('📦 [addLivraison] Début du traitement de la livraison:', JSON.stringify(livraisonData, null, 2));
+    //console.log('📦 [addLivraison] Début du traitement de la livraison:', JSON.stringify(livraisonData, null, 2));
 
     // Vérification si les données sont valides
     if (!livraisonData || typeof livraisonData !== 'object') {
@@ -243,7 +243,7 @@ module.exports.addLivraison = async (livraisonData) => {
     const isNewFormat = 'clientName' in livraisonData;
     console.log(`📝 [livraisonsService] Format détecté: ${isNewFormat ? 'nouveau' : 'ancien'}`);
 
-    console.log('🛠 [DEBUG] Données de livraison AVANT validation:', JSON.stringify(livraisonData, null, 2));
+    //console.log('🛠 [DEBUG] Données de livraison AVANT validation:', JSON.stringify(livraisonData, null, 2));
     this.validateLivraisonData(livraisonData); // Validation des données
 
     if (isNewFormat) {
@@ -257,7 +257,7 @@ module.exports.addLivraison = async (livraisonData) => {
         spreadsheetId
       );
 
-      console.log('✅ [DEBUG] Résultat après traitement handleNewFormatLivraison:', JSON.stringify(formattedResult, null, 2));
+      //console.log('✅ [DEBUG] Résultat après traitement handleNewFormatLivraison:', JSON.stringify(formattedResult, null, 2));
 
       if (!formattedResult) {
         console.error('🚨 [Erreur critique] handleNewFormatLivraison a retourné undefined ou null !');
@@ -265,7 +265,7 @@ module.exports.addLivraison = async (livraisonData) => {
       }
 
       console.log('✅ [livraisonsService] Livraison traitée avec succès (nouveau format).');
-      console.log("📤 [DEBUG] Avant validation de addLivraison:", JSON.stringify(formattedResult, null, 2));
+      //console.log("📤 [DEBUG] Avant validation de addLivraison:", JSON.stringify(formattedResult, null, 2));
 return validateResponse(formattedResult);
 
     } else {

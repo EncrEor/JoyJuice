@@ -106,7 +106,7 @@ router.post('/', async (req, res) => {
         const formattedResponse = formatResponse(response);
         
         // Log de debug
-        console.log('📤 Réponse formatée:', JSON.stringify(formattedResponse, null, 2));
+        //console.log('📤 Réponse formatée:', JSON.stringify(formattedResponse, null, 2));
 
         return res.status(200).json(formattedResponse);
 
