@@ -39,7 +39,8 @@ async createDelivery(userId, deliveryData) {
         nom: productInfo.Nom_Produit || `Produit inconnu (${produit.id})`,
         quantite: produit.quantite,
         prix_unitaire: productInfo.Prix_Unitaire,
-        total: produit.quantite * productInfo.Prix_Unitaire
+        total: produit.quantite * productInfo.Prix_Unitaire,
+        odooId: productInfo.P_IDODOO 
       };
     });
 

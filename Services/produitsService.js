@@ -85,6 +85,10 @@ class ProduitsService {
     }
   }
 
+  /**
+ * @deprecated Cette fonction n'est plus utilisée depuis l'optimisation des livraisons
+ * qui inclut maintenant l'odooId directement dans l'enrichissement initial des produits
+ */
   async getProductOdooId(productId) {
     try {
       console.log(`🔍 [produitsService] Résolution ID Odoo pour produit: ${productId}`);

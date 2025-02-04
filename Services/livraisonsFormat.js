@@ -3,7 +3,7 @@
 const detailsLivraisonsService = require('./detailsLivraisonsService');
 const { COLUMNS } = require('./constants/livraisonsConstants');
 const odooSalesService = require('./odooSalesService');
-const produitsService = require('./produitsService'); // Pour getProductOdooId
+//const produitsService = require('./produitsService'); // Pour getProductOdooId
 
 /**
  * Gère l'ajout d'une livraison (nouveau format).
@@ -51,9 +51,10 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
     for (const produit of livraisonData.produits) {
       if (produit.quantite <= 0) continue;
 
-      const odooId = await produitsService.getProductOdooId(produit.id);
+      //const odooId = await produitsService.getProductOdooId(produit.id);
       odooProducts.push({
-        id: odooId,
+      //  id: odooId,
+      id: parseInt(produit.odooId),
         quantite: produit.quantite
       });
 
