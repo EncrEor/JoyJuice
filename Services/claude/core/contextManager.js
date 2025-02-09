@@ -182,11 +182,11 @@ class ContextManager {
         };
 
         // 🛠 DEBUG : Vérifier ce qui est stocké avant de retourner
-        console.log('🛠 [DEBUG] Contexte final avant retour:', JSON.stringify(updatedContext, null, 2));
+        //console.log('🛠 [DEBUG] Contexte final avant retour:', JSON.stringify(updatedContext, null, 2));
 
         // ✅ Stockage dans le cache
         ContextManager.conversationCache.set(userId, updatedContext);
-        console.log('🔄 [DEBUG] Contexte cache après mise à jour:', ContextManager.conversationCache.get(userId));
+        //console.log('🔄 [DEBUG] Contexte cache après mise à jour:', ContextManager.conversationCache.get(userId));
 
         // ✅ Vérification finale
         console.log('✅ [contextManager] Contexte mis à jour avec succès:', updatedContext);

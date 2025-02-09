@@ -81,8 +81,11 @@ class IntentionAnalyzer {
         if (cacheStore) {
           const products = cacheStore.getData('products');
           if (products?.byId) {
-            context.products = products;
-            console.log(`✅ ${Object.keys(products.byId).length} produits en contexte`);
+            // Mise à jour du contexte via contextManager
+            await contextManager.updateConversationContext(userId, {
+              products: products
+            });
+            console.log(`✅ ${Object.keys(products.byId).length} produits mis en contexte`);
           }
         }
       } catch (cacheError) {

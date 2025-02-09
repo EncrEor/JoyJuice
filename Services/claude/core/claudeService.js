@@ -10,7 +10,7 @@ const clientLookupService = require('../../clientLookupService');
 const clientHandler = require('../handlers/clientHandler');
 const cacheManager = require('./cacheManager/cacheIndex');
 const indexManager = require('./indexManager');
-const deliveryHandler = require('../handlers/deliveryHandler');
+const DeliveryHandler = require('../handlers/deliveryHandler');
 
 
 class ClaudeService {
@@ -62,19 +62,24 @@ class ClaudeService {
     try {
       console.log(`📩 Message reçu de ${userId}:`, message);
 
-      // 1. Récupération contexte
-      const context = await contextManager.getConversationContext(userId);
-      console.log('🔍 [claudeService] Contexte récupéré:', context);
+      // 1. Récupération du contexte initial
+      const initialContext = await contextManager.getConversationContext(userId);
+      console.log('🔍 [claudeService] Contexte initial récupéré:', initialContext);
 
-      if (!context) {
-        throw new Error('[claudeService] Contexte non disponible');
-      }
+      //if (!Context) {
+      //throw new Error('[claudeService] Contexte non disponible');
+      //}
 
       // 2. Analyse avec conservation du contexte
-      const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message, context);
+      const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message);
+
+      // Récupération du contexte mis à jour après l'analyse (pour intégrer l'enrichissement produits)
+      const updatedContext = await contextManager.getConversationContext(userId);
+      console.log('🔍 [claudeService] Contexte mis à jour récupéré:', updatedContext);
+
 
       // 3. Exécution de l'action
-      const actionResult = await this.executeAction(analysis, context);
+      const actionResult = await this.executeAction(analysis, updatedContext);
 
       // 4. Enrichissement du résultat avec infos essentielles
       const enrichedResult = {
@@ -82,11 +87,11 @@ class ClaudeService {
         type: analysis.type || actionResult.type,
         analysis: analysis,
         client: actionResult.client || analysis.client,
-        context: context
+        context: updatedContext
       };
 
       // 5. Génération réponse finale via responseUtils
-      const finalResponse = await formatFinalResponse(enrichedResult, context);
+      const finalResponse = await formatFinalResponse(enrichedResult, updatedContext);
       console.log('📤 [claudeService] Réponse finale formatée:', finalResponse);
 
       // 6. Mise à jour du contexte avec la réponse formatée
@@ -204,11 +209,19 @@ class ClaudeService {
               }))
             };
 
+
             console.log('🔄 (claudeService) DeliveryData préparées:'); //, deliveryData);
 
+
+            console.log('📦 (claudeService) Contexte passé à DeliveryHandler:', {
+              hasContext: !!context,
+              hasProducts: !!context?.products,
+              productsCount: context?.products?.byId ? Object.keys(context.products.byId).length : 0
+            });
+
             // Création livraison
-            const result = await deliveryHandler.createDelivery(analysis.userId, deliveryData);
-            //console.log('📦 (claudeService) Résultat brut deliveryHandler:', JSON.stringify(result, null, 2));
+            const deliveryHandlerInstance = new DeliveryHandler(context);
+            const result = await deliveryHandlerInstance.createDelivery(analysis.userId, deliveryData);
 
             // Validation résultat
             if (!result.success || !result.livraison || !result.client) {

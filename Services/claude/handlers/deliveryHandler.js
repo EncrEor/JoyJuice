@@ -12,8 +12,16 @@ const { validateResponse } = require('../utils/responseUtils');
 
 
 class DeliveryHandler {
-  constructor() {
-    // Add initialization
+  constructor(context) {
+    if (!context) {
+      throw new Error('Contexte requis pour DeliveryHandler');
+    }
+    console.log('🔍 [DeliveryHandler] Contexte reçu:', {
+      hasContext: !!context,
+      hasProducts: !!context.products,
+      productsCount: context.products?.byId ? Object.keys(context.products.byId).length : 0
+    });
+    this.context = context;
   }
 
 // Dans deliveryHandler.js
@@ -22,9 +30,14 @@ async createDelivery(userId, deliveryData) {
     console.log('📦 [DeliveryHandler] Début création livraison:', deliveryData);
     
     // Enrichissement produits
-    const cacheStore = require('../core/cacheManager/cacheStore');
-    const productsCache = cacheStore.getData('products');
-    
+    //const cacheStore = require('../core/cacheManager/cacheStore');
+    //const productsCache = cacheStore.getData('products');
+    const productsCache = this.context?.products;
+    if (!productsCache) {
+      throw new Error('Cache produits non disponible dans le contexte');
+    }
+
+
     if (!productsCache?.byId) {
       throw new Error('Cache produits non disponible');
     }
@@ -214,4 +227,7 @@ async createDelivery(userId, deliveryData) {
 
 }
 
-module.exports = new DeliveryHandler();
+// Et au lieu d'exporter une instance :
+//module.exports = new DeliveryHandler();
+// On exporte la classe :
+module.exports = DeliveryHandler;
