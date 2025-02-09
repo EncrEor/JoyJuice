@@ -3,6 +3,8 @@
 const detailsLivraisonsService = require('./detailsLivraisonsService');
 const { COLUMNS } = require('./constants/livraisonsConstants');
 const odooSalesService = require('./odooSalesService');
+const { formatPrice } = require('./claude/utils/numberUtils');
+
 //const produitsService = require('./produitsService'); // Pour getProductOdooId
 
 /**
@@ -40,7 +42,7 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
 
     // 1. Génération ID et mapping initial
     const newLivraisonId = await generateLivraisonId();
-    
+
     // 2. Préparation pour Odoo
     console.log('[livraisonsFormat] Préparation données Odoo...');
     const odooProducts = [];
@@ -51,10 +53,8 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
     for (const produit of livraisonData.produits) {
       if (produit.quantite <= 0) continue;
 
-      //const odooId = await produitsService.getProductOdooId(produit.id);
       odooProducts.push({
-      //  id: odooId,
-      id: parseInt(produit.odooId),
+        id: parseInt(produit.odooId),
         quantite: produit.quantite
       });
 
@@ -74,6 +74,9 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
       { id: livraisonData.clientId },
       odooProducts
     );
+
+    // Récupération du solde client
+    const balance = await odooSalesService.getCustomerBalance(livraisonData.clientId);
 
     if (!odooResult.success) {
       throw new Error('Échec création devis Odoo');
@@ -108,7 +111,7 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
           resource: {
             values: [[
               detail.ID_Detail,
-              detail.ID_Livraison, 
+              detail.ID_Livraison,
               detail.ID_Produit,
               detail.Quantite,
               detail.Prix_Unit,
@@ -118,27 +121,32 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
         });
       }
 
-// 7. Retour du résultat global
-const result = {
-  success: true,
-  status: 'SUCCESS',
-  type: 'DELIVERY',
-  client: {
-    Nom_Client: livraisonData.clientName,  
-    Zone: livraisonData.zone,
-    ID_Client: livraisonData.clientId
-  },
-  livraison: {
-    id: newLivraisonId,
-    odoo_id: odooResult.orderId,
-    total: odooResult.total,
-    details: details
-  },
-  message: `${livraisonData.clientName}\nTTC: ${odooResult.total}DNT (C-${odooResult.orderId})\n${details.map(d => `${d.Quantite} ${d.ID_Produit}`).join(', ')}`
-};
+      // 7. Formatage final des montants avec formatPrice
+      const formattedTotal = formatPrice(odooResult.total);
+      const formattedBalance = formatPrice(balance);
 
-console.log('[livraisonsFormat] Retour structuré:', result);
-return result;
+      // 8. Retour du résultat global
+      const result = {
+        success: true,
+        status: 'SUCCESS',
+        type: 'DELIVERY',
+        client: {
+          Nom_Client: livraisonData.clientName,
+          Zone: livraisonData.zone,
+          ID_Client: livraisonData.clientId,
+          solde: formattedBalance // Solde formaté depuis Odoo
+        },
+        livraison: {
+          id: newLivraisonId,
+          odoo_id: odooResult.orderId,
+          total: formattedTotal,
+          details: details
+        },
+        message: `${livraisonData.clientName}\nTTC: ${formattedTotal}DNT (C-${odooResult.orderId})\n${details.map(d => `${d.Quantite} ${d.ID_Produit}`).join(', ')}\nNouveau solde: ${formattedBalance}DNT`
+      };
+
+      console.log('[livraisonsFormat] Retour structuré:', result);
+      return result;
 
     } catch (sheetsError) {
       console.error('[livraisonsFormat] Erreur Google Sheets:', sheetsError);

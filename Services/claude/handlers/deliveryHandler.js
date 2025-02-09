@@ -9,7 +9,7 @@ const livraisonsService = require('../../livraisonsService');
 const productLookupService = require('../../productLookupService');
 const DateUtils = require('../core/cacheManager/dateUtils');
 const { validateResponse } = require('../utils/responseUtils');
-
+const odooSalesService = require('../../odooSalesService');
 
 class DeliveryHandler {
   constructor(context) {
@@ -70,9 +70,11 @@ async createDelivery(userId, deliveryData) {
 
     // Création via livraisonsService
     const result = await livraisonsService.addLivraison(livraisonData);
+    // Récupération du solde client
+    const soldeClient = await this.calculateClientBalance(deliveryData.clientId);
+    
     console.log('✅ [DeliveryHandler] Résultat après ajout:', result);
 
-    // ✅ Modification du retour pour garantir le format correct
     return {
       ...result,
       livraison: {
@@ -80,7 +82,8 @@ async createDelivery(userId, deliveryData) {
         client: {
           name: result.client?.name || deliveryData.clientName,
           id: result.client?.id || deliveryData.clientId,
-          zone: result.client?.zone || deliveryData.zone
+          zone: result.client?.zone || deliveryData.zone,
+          solde: soldeClient // Ajout du solde ici
         }
       }
     };
@@ -209,16 +212,17 @@ async createDelivery(userId, deliveryData) {
  */
   async calculateClientBalance(clientId) {
     try {
-      console.log('💰 [DeliveryHandler] Récupération des livraisons non payées pour calculer le solde...');
-      const livraisonsNonPayees = await livraisonsService.getLivraisonsByClientCurrentMonth(clientId);
-
-      const soldeActuel = livraisonsNonPayees.reduce((total, liv) => {
-        const montant = parseFloat(liv.Total_livraison);
-        return total + (isNaN(montant) ? 0 : montant);
-      }, 0);
-
-      console.log('💰 [DeliveryHandler] Solde actuel calculé:', soldeActuel);
-      return soldeActuel;
+      console.log('💰 [DeliveryHandler] Calcul du solde client:', clientId);
+  
+      // Import du service Odoo
+      const odooSalesService = require('../../odooSalesService');
+      
+      // Récupération solde client depuis Odoo
+      const soldeOdoo = await odooSalesService.getCustomerBalance(clientId);
+  
+      console.log('💰 [DeliveryHandler] Solde Odoo récupéré:', soldeOdoo);
+      return soldeOdoo;
+      
     } catch (error) {
       console.error('❌ [DeliveryHandler] Erreur lors du calcul du solde:', error);
       throw ErrorUtils.createError('Erreur lors du calcul du solde client', 'BALANCE_CALCULATION_ERROR', error);

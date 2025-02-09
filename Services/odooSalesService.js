@@ -1,5 +1,3 @@
-// Services/odooSalesService.js
-
 const odooAuth = require('./odooAuth');
 
 class OdooSalesService {
@@ -23,16 +21,16 @@ class OdooSalesService {
       console.log('📝 Création devis Odoo...', { client: clientData, produits: products });
       const models = odooAuth.getModelsClient();
       const uid = odooAuth.getUid();
-  
+
       const now = new Date();
       const formattedDate = now.toISOString().replace('T', ' ').slice(0, 19);
-  
+
       const saleOrderData = {
         partner_id: parseInt(clientData.id),
         date_order: formattedDate,
         state: 'draft'
       };
-  
+
       return new Promise((resolve, reject) => {
         models.methodCall('execute_kw', [
           odooAuth.db,
@@ -50,7 +48,7 @@ class OdooSalesService {
             reject(error);
             return;
           }
-  
+
           try {
             console.log('✅ Devis créé:', orderId);
             const orderLines = products.map(product => ({
@@ -58,11 +56,11 @@ class OdooSalesService {
               product_id: parseInt(product.id),
               product_uom_qty: product.quantite
             }));
-  
+
             console.log('📝 Ajout lignes:', orderLines);
             await this.addOrderLines(orderId, orderLines);
             const total = await this.getQuotationTotal(orderId);
-  
+
             resolve({
               success: true,
               orderId,
@@ -135,6 +133,164 @@ class OdooSalesService {
       });
     });
   }
+
+  /**
+   * Récupère le solde (montant dû) d'un client depuis Odoo
+   * @param {string} partnerId - ID du client dans Odoo
+   * @returns {Promise<number>} Solde total du client
+   */
+
+
+
+
+
+  async getCustomerBalance(partnerId) {
+    try {
+      console.log(`💰 [odooSalesService] Récupération solde pour client ${partnerId}`);
+  
+      // S'assurer d'être connecté à Odoo
+      await this.ensureConnection();
+      const models = odooAuth.getModelsClient();
+      const uid = odooAuth.getUid();
+      if (!models || !uid) {
+        console.error("❌ [ERROR] Échec connexion à Odoo (models ou uid est null)");
+        return 0;
+      }
+  
+      // 🔹 Vérification de l'existence du client
+      let clientExists = await new Promise((resolve, reject) => {
+        models.methodCall(
+          'execute_kw',
+          [
+            odooAuth.db,
+            uid,
+            odooAuth.password,
+            'res.partner',
+            'search_read',
+            [
+              [['id', '=', parseInt(partnerId)]]
+            ],
+            { fields: ['name'] }
+          ],
+          (error, result) => {
+            if (error) {
+              console.error("❌ [ERROR] Vérification client Odoo:", error);
+              reject(error);
+              return;
+            }
+            //console.log(`📊 [DEBUG] Client trouvé dans Odoo:`, result);
+            resolve(result.length > 0);
+          }
+        );
+      });
+      if (!clientExists) {
+        console.error("❌ [ERROR] Client non trouvé dans Odoo.");
+        return 0;
+      }
+  
+      // 🔹 Récupération des factures impayées (account.move)
+      let unpaidInvoices = await new Promise((resolve, reject) => {
+        models.methodCall(
+          'execute_kw',
+          [
+            odooAuth.db,
+            uid,
+            odooAuth.password,
+            'account.move',
+            'search_read',
+            [
+              [['partner_id', '=', parseInt(partnerId)],
+               ['state', '=', 'posted'],
+               ['payment_state', '!=', 'paid']]
+            ],
+            { fields: ['id', 'amount_residual'] }
+          ],
+          (error, result) => {
+            if (error) {
+              console.error("❌ [ERROR] Problème récupération factures impayées:", error);
+              reject(error);
+              return;
+            }
+            //console.log("📊 [DEBUG] Factures impayées récupérées:", result);
+            const totalUnpaid = result.reduce((sum, invoice) => sum + (invoice.amount_residual || 0), 0);
+            resolve(totalUnpaid);
+          }
+        );
+      });
+  
+      // 🔹 Récupération des devis (sale.order en mode draft)
+      let draftOrders = await new Promise((resolve, reject) => {
+        models.methodCall(
+          'execute_kw',
+          [
+            odooAuth.db,
+            uid,
+            odooAuth.password,
+            'sale.order',
+            'search_read',
+            [
+              [['partner_id', '=', parseInt(partnerId)],
+               ['state', '=', 'draft']]
+            ],
+            { fields: ['id', 'amount_total'] }
+          ],
+          (error, result) => {
+            if (error) {
+              console.error("❌ [ERROR] Problème récupération devis (draft orders):", error);
+              reject(error);
+              return;
+            }
+            //console.log("📊 [DEBUG] Devis (draft orders) récupérés:", result);
+            const totalDraft = result.reduce((sum, order) => sum + (order.amount_total || 0), 0);
+            resolve(totalDraft);
+          }
+        );
+      });
+  
+      // 🔹 Récupération des commandes validées en attente de facturation (state = 'sale' et invoice_status = 'to invoice')
+      let confirmedOrders = await new Promise((resolve, reject) => {
+        models.methodCall(
+          'execute_kw',
+          [
+            odooAuth.db,
+            uid,
+            odooAuth.password,
+            'sale.order',
+            'search_read',
+            [
+              [['partner_id', '=', parseInt(partnerId)],
+               ['state', '=', 'sale'],
+               ['invoice_status', '=', 'to invoice']]
+            ],
+            { fields: ['id', 'amount_total'] }
+          ],
+          (error, result) => {
+            if (error) {
+              console.error("❌ [ERROR] Problème récupération commandes validées en attente de facturation:", error);
+              reject(error);
+              return;
+            }
+            //console.log("📊 [DEBUG] Commandes validées en attente de facturation récupérées:", result);
+            const totalConfirmed = result.reduce((sum, order) => sum + (order.amount_total || 0), 0);
+            resolve(totalConfirmed);
+          }
+        );
+      });
+  
+      const unpaidOrders = draftOrders + confirmedOrders;
+      const balance = unpaidInvoices + unpaidOrders;
+      console.log(`✅ Solde client final: ${balance} DNT (Factures impayées + Devis + Commandes en attente de facturation)`);
+      return balance;
+  
+    } catch (error) {
+      console.error('❌ [ERROR] Récupération solde client a échoué:', error);
+      return 0;
+    }
+  }
+
+
+
+
 }
 
 module.exports = new OdooSalesService();

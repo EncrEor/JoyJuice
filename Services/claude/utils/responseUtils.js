@@ -67,7 +67,8 @@ const ResponseTypes = {
     return {
       name: client.name || client.Nom_Client || client.nom || "Donnée manquante",
       zone: client.zone || client.Zone || "Donnée manquante",
-      id: client.id || client.ID_Client || "Donnée manquante"
+      id: client.id || client.ID_Client || "Donnée manquante",
+      solde: client.solde ?? "Donnée manquante" // Ajout du solde ici
     };
   }
   
