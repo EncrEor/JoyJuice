@@ -1,12 +1,11 @@
 // Services/claude/indexManager.js
-const NodeCache = require('node-cache');
+//const NodeCache = require('node-cache');
 const clientsService = require('../../../Services/clientsService');
-const produitsService = require('../../../Services/produitsService');
-const livraisonsService = require('../../../Services/livraisonsService');
+//const produitsService = require('../../../Services/produitsService');
 const clientLookupService = require('../../clientLookupService');
 const cacheManager = require('./cacheManager/cacheIndex');
-const eventManager = require('./cacheManager/eventManager');
-const StringUtils = require('../utils/stringUtils');
+//const eventManager = require('./cacheManager/eventManager');
+//const StringUtils = require('../utils/stringUtils');
 
 class IndexManager {
     static instance = null;
@@ -15,7 +14,6 @@ class IndexManager {
     static indexes = {
         byZoneAndProduct: new Map(),
         byDeliveryTime: new Map(),
-        byFrequency: new Map(),
         byRoute: new Map()
     };
 
@@ -63,13 +61,11 @@ class IndexManager {
             // Récupération des données avec logs
             console.log('📥 [indexManager] Récupération des données du cache...');
             const clients = cacheStore.getData('clients');
-            const deliveries = cacheStore.getData('deliveries');
     
             // Vérification des données
-            if (!clients || !deliveries) {
+            if (!clients) {
                 console.warn('⚠️ Données nécessaires non disponibles dans le cache:', {
-                    clientsPresent: !!clients,
-                    deliveriesPresent: !!deliveries
+                    clientsPresent: !!clients
                 });
                 if (retryCount < maxRetries) {
                     const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
@@ -88,9 +84,6 @@ class IndexManager {
             
             console.log('📊 [indexManager] Construction index créneaux horaires...');
             this.buildTimeSlotIndex(clients.byId ? Object.values(clients.byId) : []);
-            
-            console.log('📊 [indexManager] Construction index fréquence...');
-            this.buildFrequencyIndex(deliveries.byId ? Object.values(deliveries.byId) : []);
             
             console.log('📊 [indexManager] Construction index routes...');
             this.buildRouteIndex(clients.byId ? Object.values(clients.byId) : []);
@@ -127,38 +120,6 @@ class IndexManager {
                 }
                 IndexManager.indexes.byDeliveryTime.get(timeSlot).add(client.ID_Client);
             }
-        });
-    }
-
-    buildFrequencyIndex(deliveries) {
-        IndexManager.indexes.byFrequency.clear();
-        // Grouper les livraisons par client et calculer la fréquence
-        const frequencyMap = new Map();
-
-        deliveries.forEach(delivery => {
-            if (!frequencyMap.has(delivery.ID_Client)) {
-                frequencyMap.set(delivery.ID_Client, {
-                    count: 0,
-                    lastDelivery: null
-                });
-            }
-
-            const clientStats = frequencyMap.get(delivery.ID_Client);
-            clientStats.count++;
-
-            if (!clientStats.lastDelivery ||
-                new Date(delivery.Date_Livraison) > new Date(clientStats.lastDelivery)) {
-                clientStats.lastDelivery = delivery.Date_Livraison;
-            }
-        });
-
-        // Convertir en index de fréquence
-        frequencyMap.forEach((stats, clientId) => {
-            const frequency = this.calculateFrequency(stats);
-            if (!IndexManager.indexes.byFrequency.has(frequency)) {
-                IndexManager.indexes.byFrequency.set(frequency, new Set());
-            }
-            IndexManager.indexes.byFrequency.get(frequency).add(clientId);
         });
     }
 
@@ -236,58 +197,6 @@ class IndexManager {
         }
     }
 
-    // Ajouter cette nouvelle méthode pour les statistiques produits
-    async calculateProductFrequency(productId, deliveries = []) {
-        try {
-            const stats = {
-                dailyCount: new Map(),
-                weeklyTotal: 0,
-                averageQuantity: 0,
-                totalQuantity: 0
-            };
-
-            // Si aucune livraison fournie, utiliser les données du cache
-            if (deliveries.length === 0) {
-                deliveries = await this.fetchDeliveries() || [];
-            }
-
-            let totalDays = 0;
-
-            // Vérifier que les livraisons existent et ont des produits
-            deliveries.forEach(delivery => {
-                if (delivery && delivery.produits && Array.isArray(delivery.produits)) {
-                    const produit = delivery.produits.find(p => p.id === productId);
-                    if (produit) {
-                        const date = new Date(delivery.Date_Livraison).toISOString().split('T')[0];
-                        stats.dailyCount.set(date, (stats.dailyCount.get(date) || 0) + 1);
-                        stats.totalQuantity += produit.quantity || 0;
-                        totalDays++;
-                    }
-                }
-            });
-
-            // Calculer les moyennes
-            stats.weeklyTotal = Math.ceil((stats.dailyCount.size / 7) * 7) || 0;
-            stats.averageQuantity = totalDays > 0 ? stats.totalQuantity / totalDays : 0;
-
-            return {
-                frequency: this.getProductFrequencyCategory(stats.weeklyTotal),
-                stats: stats
-            };
-        } catch (error) {
-            console.error('[indexManager] Erreur calcul fréquence produit:', error);
-            return {
-                frequency: 'unknown',
-                stats: {
-                    dailyCount: new Map(),
-                    weeklyTotal: 0,
-                    averageQuantity: 0,
-                    totalQuantity: 0
-                }
-            };
-        }
-    }
-
     getProductFrequencyCategory(weeklyTotal) {
         if (weeklyTotal >= 15) return 'high-volume';      // 15+ commandes par semaine
         if (weeklyTotal >= 8) return 'medium-volume';     // 8-14 commandes par semaine
@@ -304,10 +213,6 @@ class IndexManager {
 
     getClientsByTimeSlot(timeSlot) {
         return Array.from(IndexManager.indexes.byDeliveryTime.get(timeSlot) || []);
-    }
-
-    getClientsByFrequency(frequency) {
-        return Array.from(IndexManager.indexes.byFrequency.get(frequency) || []);
     }
 
     getSuggestedRoute(zone) {
@@ -342,19 +247,9 @@ class IndexManager {
         }
     }
 
-    async fetchDeliveries() {
-        try {
-            return await livraisonsService.getLivraisonsDataCurrentMonth();
-        } catch (error) {
-            console.error('[indexManager] Erreur lors de la récupération des livraisons:', error);
-            return [];
-        }
-    }
-
     // Pour les tests uniquement
-    async mockFetchData(mockClients, mockDeliveries) {
+    async mockFetchData(mockClients) {
         this.fetchClients = async () => mockClients;
-        this.fetchDeliveries = async () => mockDeliveries;
     }
 }
 

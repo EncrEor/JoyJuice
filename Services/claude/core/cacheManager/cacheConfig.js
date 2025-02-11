@@ -28,16 +28,7 @@ const CACHE_CONFIG = {
                 'PRODUCT_DELETED'
             ]
         },
-        DELIVERIES: {
-            isStatic: false,          
-            refreshInterval: null,
-            TTL: null,             
-            invalidationEvents: [
-                'DELIVERY_ADDED',
-                'DELIVERY_UPDATED',
-                'DELIVERY_DELETED'
-            ]
-        }
+
     },
 
     // Configuration des retries en cas d'erreur
@@ -55,9 +46,6 @@ const CACHE_CONFIG = {
         'PRODUCT_ADDED': 'PRODUCT_ADDED',
         'PRODUCT_UPDATED': 'PRODUCT_UPDATED',
         'PRODUCT_DELETED': 'PRODUCT_DELETED',
-        'LIVRAISON_ADDED': 'DELIVERY_ADDED',
-        'LIVRAISON_UPDATED': 'DELIVERY_UPDATED',
-        'LIVRAISON_DELETED': 'DELIVERY_DELETED',
         'NEW_DAY': 'DAILY_RESET',
         'CACHE_RESET': 'CACHE_RESET'
     }

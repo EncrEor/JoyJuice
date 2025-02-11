@@ -178,42 +178,6 @@ class CacheManager {
                 throw new Error(`Échec initialisation produits: ${productError.message}`);
             }
 
-            // 3. LIVRAISONS
-            try {
-                console.log('🔍 [cacheIndex] Récupération des livraisons...');
-                const deliveries = await this.fetchDeliveries();
-
-                // Validation explicite du format des livraisons
-                if (!Array.isArray(deliveries)) {
-                    console.error('❌ [cacheIndex] Format livraisons invalide:', typeof deliveries);
-                    throw new Error('Format de données livraisons invalide');
-                }
-
-                // Optimisation et mise en cache même si vide
-                const optimizedDeliveries = CacheUtils.optimizeLivraisonsForSearch(deliveries || []);
-                cacheStore.setData('deliveries', optimizedDeliveries);
-                // Vérification de l'intégrité après la mise en cache
-                console.log('🔍 [cacheIndex] Vérification de l\'intégrité du cache des livraisons...');
-                const integrityResult = await this.verifyCacheIntegrity('deliveries');
-                console.log('✅ [cacheIndex] Résultat vérification intégrité:', {
-                    success: integrityResult,
-                    cacheSize: optimizedDeliveries?.byId ? Object.keys(optimizedDeliveries.byId).length : 0
-                });
-
-
-                // Log approprié selon le résultat
-                if (deliveries.length > 0) {
-                    console.log(`✅ [cacheIndex] Livraisons mises en cache: ${deliveries.length}`);
-                } else {
-                    console.warn('⚠️ Aucune livraison active trouvée pour la période');
-                }
-            } catch (deliveryError) {
-                // Les erreurs de livraison ne bloquent pas l'initialisation
-                console.error('⚠️ Erreur récupération livraisons:', deliveryError);
-                cacheStore.setData('deliveries', CacheUtils.optimizeLivraisonsForSearch([]));
-                console.warn('⚠️ Cache initialisé avec un tableau de livraisons vide');
-            }
-
             // 4. VÉRIFICATION FINALE
             try {
                 await this.verifyCacheState();
@@ -245,13 +209,11 @@ class CacheManager {
         const cacheState = {
             clients: cacheStore.getData('clients'),
             products: cacheStore.getData('products'),
-            deliveries: cacheStore.getData('deliveries')
         };
 
         console.log('📊 État du cache:', {
             clients: cacheState.clients?.byId ? Object.keys(cacheState.clients.byId).length : 0,
-            products: cacheState.products?.byId ? Object.keys(cacheState.products.byId).length : 0,
-            deliveries: cacheState.deliveries?.byId ? Object.keys(cacheState.deliveries.byId).length : 0
+            products: cacheState.products?.byId ? Object.keys(cacheState.products.byId).length : 0
         });
     }
 
@@ -260,70 +222,6 @@ class CacheManager {
         console.log('✅ [cacheIndex] Cache configuré pour rafraîchissement sur événements uniquement');
     }
 
-    // Récupération des livraisonss
-async fetchDeliveries() {
-    try {
-        console.log('🔍 [cacheIndex] Début fetchDeliveries');
-        console.log('📦 [cacheIndex] Cache actuel:', cacheStore.getData('deliveries'));
-
-        const { start, end, formatDate } = DateUtils.getDateRange(3);
-        const formattedStartDate = formatDate(start);
-        const formattedEndDate = formatDate(end);
-
-        console.log('🔍 [cacheIndex] Récupération des livraisons...');
-        let allDeliveries = await livraisonsService.getLivraisonsData();
-
-        // Log du format des données reçues
-        console.log('📄 [cacheIndex] Format des livraisons reçues:', {
-            isArray: Array.isArray(allDeliveries),
-            length: allDeliveries?.length,
-            sample: allDeliveries?.[0],
-            keys: allDeliveries?.[0] ? Object.keys(allDeliveries[0]) : []
-        });
-
-        if (!allDeliveries) {
-            console.error('❌ [cacheIndex] Aucune donnée de livraison reçue');
-            return [];
-        }
-
-        if (!Array.isArray(allDeliveries)) {
-            console.error('❌ [cacheIndex] Format invalide des livraisons reçues:', typeof allDeliveries);
-            return [];
-        }
-
-        const filteredDeliveries = allDeliveries.filter(delivery => {
-            if (!delivery?.Date_Livraison) return false;
-            
-            const deliveryDate = DateUtils.convertToISODate(delivery.Date_Livraison);
-            if (!deliveryDate) return false;
-
-            return (
-                delivery.Statut_L === 'En cours' &&
-                deliveryDate >= formattedStartDate &&
-                deliveryDate <= formattedEndDate
-            );
-        });
-
-        if (filteredDeliveries.length > 0) {
-            console.log(`✅ ${filteredDeliveries.length} livraisons "En cours" récupérées (3 derniers mois)`);
-        } else {
-            console.log('ℹ️ [cacheIndex] Aucune livraison trouvée pour la période');
-        }
-
-        console.log('✅ [cacheIndex] Données filtrées:', filteredDeliveries);
-        // Ajout du log de diagnostic
-        console.log('🔍 fetchDeliveries retourne:', {
-            filteredCount: filteredDeliveries.length,
-            returningRawData: true,
-            willBeOptimizedLater: 'Dans initializeCache'
-        });
-        return filteredDeliveries;
-
-    } catch (error) {
-        console.error('❌ [cacheIndex] Erreur critique dans fetchDeliveries:', error);
-        return [];
-    }
-}
 
     async validateServices() {
         console.log('🔍 [cacheIndex] Validation des services...');

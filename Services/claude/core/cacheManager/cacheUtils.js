@@ -79,61 +79,6 @@ class CacheUtils {
         return optimized;
     }
 
-    static optimizeLivraisonsForSearch(livraisons) {
-        try {
-            console.log('🔄 Optimisation des livraisons pour le cache...');
-            
-            // Validation de l'entrée
-            if (!Array.isArray(livraisons)) {
-                console.warn('⚠️ Format livraisons invalide - Initialisation structure vide');
-                return { byId: {}, byClient: {}, byStatus: {} };
-            }
-    
-            const optimized = {
-                byId: {},
-                byClient: {},
-                byStatus: {}
-            };
-    
-            // Log initial
-            console.log(`📊 Traitement de ${livraisons.length} livraisons`);
-    
-            livraisons.forEach(livraison => {
-                if (!livraison?.ID_Livraison) return;
-    
-                // Indexation par ID
-                optimized.byId[livraison.ID_Livraison] = livraison;
-    
-                // Indexation par client
-                if (livraison.ID_Client) {
-                    if (!optimized.byClient[livraison.ID_Client]) {
-                        optimized.byClient[livraison.ID_Client] = [];
-                    }
-                    optimized.byClient[livraison.ID_Client].push(livraison);
-                }
-    
-                // Indexation par statut
-                const status = livraison.Statut_L || 'inconnu';
-                if (!optimized.byStatus[status]) {
-                    optimized.byStatus[status] = [];
-                }
-                optimized.byStatus[status].push(livraison);
-            });
-    
-            // Log des résultats
-            console.log('📊 Structure optimisée créée:', {
-                totalIds: Object.keys(optimized.byId).length,
-                totalClients: Object.keys(optimized.byClient).length,
-                totalStatuts: Object.keys(optimized.byStatus).length
-            });
-    
-            return optimized;
-        } catch (error) {
-            console.error('❌ Erreur lors de l\'optimisation des livraisons:', error);
-            return { byId: {}, byClient: {}, byStatus: {} };
-        }
-    }
-
     // Vérification de l'intégrité du cache
     static verifyCacheIntegrity(cache, type) {
         const issues = [];
@@ -149,9 +94,6 @@ class CacheUtils {
                 break;
             case 'products':
                 issues.push(...this.verifyProductsIntegrity(cache));
-                break;
-            case 'deliveries':
-                issues.push(...this.verifyLivraisonsIntegrity(cache));
                 break;
         }
 
@@ -190,21 +132,6 @@ class CacheUtils {
         return issues;
     }
 
-    static verifyLivraisonsIntegrity(cache) {
-        const issues = [];
-        Object.entries(cache.byId).forEach(([id, livraison]) => {
-            if (livraison.ID_Client && 
-                !cache.byClient[livraison.ID_Client]?.some(l => l.ID_Livraison === id)) {
-                issues.push(`Index client manquant pour la livraison ${id}`);
-            }
-
-            const status = livraison.Statut_L || 'inconnu';
-            if (!cache.byStatus[status]?.some(l => l.ID_Livraison === id)) {
-                issues.push(`Index statut manquant pour la livraison ${id}`);
-            }
-        });
-        return issues;
-    }
 }
 
 module.exports = CacheUtils;
