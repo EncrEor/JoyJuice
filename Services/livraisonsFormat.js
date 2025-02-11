@@ -36,14 +36,15 @@ async function rollbackGoogleSheets(livraisonId, sheets, spreadsheetId) {
   }
 }
 
-async function handleNewFormatLivraison(livraisonData, generateLivraisonId, sheets, spreadsheetId) {
+// Fonction simplifiée : suppression de la création dans Google Sheets
+async function handleNewFormatLivraison(livraisonData, generateLivraisonId) {
   try {
     console.log('[livraisonsFormat] Début traitement nouvelle livraison:', livraisonData);
 
-    // 1. Génération ID et mapping initial
+    // 1. Génération de l'ID de livraison et mapping initial
     const newLivraisonId = await generateLivraisonId();
 
-    // 2. Préparation pour Odoo
+    // 2. Préparation des données pour Odoo
     console.log('[livraisonsFormat] Préparation données Odoo...');
     const odooProducts = [];
     let totalLivraison = 0;
@@ -69,96 +70,57 @@ async function handleNewFormatLivraison(livraisonData, generateLivraisonId, shee
       });
     }
 
-    // 4. Création devis Odoo
+    // 4. Création du devis dans Odoo
     const odooResult = await odooSalesService.createQuotation(
       { id: livraisonData.clientId },
       odooProducts
     );
 
-    // Récupération du solde client
+    // Récupération du solde client depuis Odoo
     const balance = await odooSalesService.getCustomerBalance(livraisonData.clientId);
 
     if (!odooResult.success) {
       throw new Error('Échec création devis Odoo');
     }
 
-    try {
-      // 5. Création dans Google Sheets
-      const livraisonRow = [
-        newLivraisonId,
-        livraisonData.date,
-        livraisonData.clientId,
-        totalLivraison.toString(),
-        'En cours',
-        odooResult.orderId
-      ];
+    // 5. Formatage final des montants
+    const formattedTotal = formatPrice(odooResult.total);
+    const formattedBalance = formatPrice(balance);
 
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: 'Livraisons!A:F',
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
-        resource: { values: [livraisonRow] }
-      });
+    // 6. Retour du résultat global sans interaction avec Google Sheets
+    const result = {
+      success: true,
+      status: 'SUCCESS',
+      type: 'DELIVERY',
+      client: {
+        Nom_Client: livraisonData.clientName,
+        Zone: livraisonData.zone,
+        ID_Client: livraisonData.clientId,
+        solde: formattedBalance // Solde formaté
+      },
+      livraison: {
+        id: newLivraisonId,
+        odoo_id: odooResult.orderId,
+        total: formattedTotal,
+        details: details
+      },
+      message: `${livraisonData.clientName}\n\n${details.map(d => `${d.Quantite} ${d.ID_Produit}`).join(', ')}\nTTC: ${formattedTotal}DNT (C-${odooResult.orderId})\n\nSOLDE: ${formattedBalance}DNT`
+    };
 
-      // 6. Ajout des détails
-      for (const detail of details) {
-        await sheets.spreadsheets.values.append({
-          spreadsheetId,
-          range: 'DetailsLivraisons!A:F',
-          valueInputOption: 'RAW',
-          insertDataOption: 'INSERT_ROWS',
-          resource: {
-            values: [[
-              detail.ID_Detail,
-              detail.ID_Livraison,
-              detail.ID_Produit,
-              detail.Quantite,
-              detail.Prix_Unit,
-              detail.Total_Ligne
-            ]]
-          }
-        });
-      }
-
-      // 7. Formatage final des montants avec formatPrice
-      const formattedTotal = formatPrice(odooResult.total);
-      const formattedBalance = formatPrice(balance);
-
-      // 8. Retour du résultat global
-      const result = {
-        success: true,
-        status: 'SUCCESS',
-        type: 'DELIVERY',
-        client: {
-          Nom_Client: livraisonData.clientName,
-          Zone: livraisonData.zone,
-          ID_Client: livraisonData.clientId,
-          solde: formattedBalance // Solde formaté depuis Odoo
-        },
-        livraison: {
-          id: newLivraisonId,
-          odoo_id: odooResult.orderId,
-          total: formattedTotal,
-          details: details
-        },
-        message: `${livraisonData.clientName}\nTTC: ${formattedTotal}DNT (C-${odooResult.orderId})\n${details.map(d => `${d.Quantite} ${d.ID_Produit}`).join(', ')}\nNouveau solde: ${formattedBalance}DNT`
-      };
-
-      console.log('[livraisonsFormat] Retour structuré:', result);
-      return result;
-
-    } catch (sheetsError) {
-      console.error('[livraisonsFormat] Erreur Google Sheets:', sheetsError);
-      // TODO: Ajouter rollback Odoo si nécessaire
-      throw new Error(`Erreur Google Sheets: ${sheetsError.message}`);
-    }
+    console.log('[livraisonsFormat] Retour structuré:', result);
+    return result;
 
   } catch (error) {
     console.error('[livraisonsFormat] Erreur globale:', error);
     throw error;
   }
 }
+
+module.exports = {
+  handleNewFormatLivraison,
+  // Les autres fonctions (handleOldFormatLivraison, handleUpdateLivraisonNewFormat, handleUpdateLivraisonOldFormat)
+  // peuvent être conservées si elles sont utilisées dans d'autres contextes.
+};
 
 /**
  * Gère l'ajout d'une livraison (ancien format).

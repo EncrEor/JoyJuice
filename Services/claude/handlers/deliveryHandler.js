@@ -73,7 +73,7 @@ async createDelivery(userId, deliveryData) {
     // Récupération du solde client
     const soldeClient = await this.calculateClientBalance(deliveryData.clientId);
     
-    console.log('✅ [DeliveryHandler] Résultat après ajout:', result);
+    //console.log('✅ [DeliveryHandler] Résultat après ajout:', result);
 
     return {
       ...result,

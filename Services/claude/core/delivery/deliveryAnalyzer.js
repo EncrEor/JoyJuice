@@ -25,7 +25,7 @@ class DeliveryAnalyzer {
       return;
     }
 
-    console.log('🔄 (deliveryAnalyzer)Initialisation DeliveryAnalyzer...');
+    //console.log('🔄 (deliveryAnalyzer)Initialisation DeliveryAnalyzer...');
 
     // Extraire clients et produits du contexte
     const clients = this.context.clients || [];
@@ -45,7 +45,7 @@ class DeliveryAnalyzer {
     ${examples}
     ${outputFormat}`;
 
-    console.log('✅ (deliveryAnalyzer) DeliveryAnalyzer initialisé');
+    console.log('✅ [deliveryAnalyzer] DeliveryAnalyzer initialisé');
   }
 
   buildReferenceTables(clients, products) {

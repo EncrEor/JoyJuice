@@ -18,8 +18,8 @@ class CacheStore {
 
         // Cache principal pour les données métier
         this.dataCache = new NodeCache({
-            stdTTL: CACHE_CONFIG.TYPES.DELIVERIES.TTL || 3600,
-            checkperiod: 600, // Vérification toutes les 10 minutes
+            stdTTL: 0,
+            checkperiod: 0,
             useClones: false
         });
         

@@ -242,7 +242,7 @@ class ClaudeService {
                 message: result.message
               };
 
-              console.log('✅ (claudeService) Réponse finale:', response);
+              console.log('✅ [claudeService] Réponse finale reçue de DeliveryHandler:', response);
               return response;
 
             } catch (mappingError) {

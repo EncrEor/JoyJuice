@@ -256,22 +256,8 @@ class CacheManager {
     }
 
     setupAutoRefresh() {
-        const deliveryConfig = CACHE_CONFIG.TYPES.DELIVERIES;
-        if (deliveryConfig.refreshInterval) {
-            console.log(`⏰ [cacheIndex] Configuration du rafraîchissement automatique des livraisons (${deliveryConfig.refreshInterval}ms)`);
-            setInterval(async () => {
-                try {
-                    console.log('🔄 Rafraîchissement des livraisons...');
-                    await eventManager.emit('beforeRefresh', { type: 'deliveries' });
-                    const deliveries = await this.fetchDeliveries();
-                    cacheStore.setData('deliveries', CacheUtils.optimizeLivraisonsForSearch(deliveries));
-                    await eventManager.emit('afterRefresh', { type: 'deliveries', count: deliveries?.length || 0 });
-                } catch (error) {
-                    console.error('❌ [cacheIndex] Erreur rafraîchissement livraisons:', error);
-                    await eventManager.emit('error', { type: 'deliveries', error });
-                }
-            }, deliveryConfig.refreshInterval);
-        }
+        // Ne rien faire car plus besoin de rafraîchissement automatique
+        console.log('✅ [cacheIndex] Cache configuré pour rafraîchissement sur événements uniquement');
     }
 
     // Récupération des livraisonss

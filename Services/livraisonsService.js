@@ -247,7 +247,7 @@ module.exports.addLivraison = async (livraisonData) => {
     this.validateLivraisonData(livraisonData); // Validation des données
 
     if (isNewFormat) {
-      console.log('📝 [livraisonsService] Format détecté: nouveau');
+      //console.log('📝 [livraisonsService] Format détecté: nouveau');
 
       // Traitement du format "nouveau"
       const formattedResult = await handleNewFormatLivraison(
