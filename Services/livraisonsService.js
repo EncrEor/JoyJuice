@@ -250,12 +250,7 @@ module.exports.addLivraison = async (livraisonData) => {
       //console.log('📝 [livraisonsService] Format détecté: nouveau');
 
       // Traitement du format "nouveau"
-      const formattedResult = await handleNewFormatLivraison(
-        livraisonData,
-        this.generateLivraisonId,
-        sheets,
-        spreadsheetId
-      );
+      const formattedResult = await handleNewFormatLivraison(livraisonData);
 
       //console.log('✅ [DEBUG] Résultat après traitement handleNewFormatLivraison:', JSON.stringify(formattedResult, null, 2));
 

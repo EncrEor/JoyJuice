@@ -37,12 +37,12 @@ async function rollbackGoogleSheets(livraisonId, sheets, spreadsheetId) {
 }
 
 // Fonction simplifiée : suppression de la création dans Google Sheets
-async function handleNewFormatLivraison(livraisonData, generateLivraisonId) {
+async function handleNewFormatLivraison(livraisonData) {
   try {
     console.log('[livraisonsFormat] Début traitement nouvelle livraison:', livraisonData);
 
     // 1. Génération de l'ID de livraison et mapping initial
-    const newLivraisonId = await generateLivraisonId();
+    const newLivraisonId = 'NO_DELIVERY';
 
     // 2. Préparation des données pour Odoo
     console.log('[livraisonsFormat] Préparation données Odoo...');
