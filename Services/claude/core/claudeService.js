@@ -224,7 +224,7 @@ class ClaudeService {
             const result = await deliveryHandlerInstance.createDelivery(analysis.userId, deliveryData);
 
             // Validation résultat
-            if (!result.success || !result.livraison || !result.client) {
+            if (!result.success || !result.livraison || !result.livraison.client) {
               throw new Error('Données de livraison invalides');
             }
 
@@ -233,11 +233,7 @@ class ClaudeService {
               const response = {
                 type: 'DELIVERY',
                 status: result.status,
-                client: {
-                  name: result.client.Nom_Client,
-                  zone: result.client.Zone,
-                  id: result.client.ID_Client
-                },
+                client: result.livraison.client,
                 livraison: result.livraison,
                 message: result.message
               };

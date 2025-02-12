@@ -45,7 +45,7 @@ const normalizeString = (str) => {
 // Conversion en objet client
 const arrayToClientObject = (clientArray) => {
   if (!clientArray || clientArray.length < Object.keys(COLUMNS).length) {
-    console.warn('⚠️ Ligne client invalide ou incomplète :', clientArray);
+    console.warn('⚠️ [clientLookupservice] Ligne client invalide ou incomplète :', clientArray);
     return null;
   }
 
@@ -69,7 +69,7 @@ const arrayToClientObject = (clientArray) => {
   };
 
   if (!client.ID_Client || !client.Nom_Client) {
-    console.warn('⚠️ Client ignoré à cause de données manquantes :', client);
+    console.warn('⚠️ [clientLookupservice] Client ignoré à cause de données manquantes :', client);
     return null;
   }
 
@@ -79,14 +79,14 @@ const arrayToClientObject = (clientArray) => {
 // Chargement abreviations
 async function loadClientAbreviations() {
   try {
-    console.log(' Chargement des abréviations clients...');
+    console.log(' [clientLookupservice] Chargement des abréviations clients...');
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: ABREV_RANGE,
     });
 
     if (!result.data.values) {
-      console.log('⚠️ Aucune abréviation trouvée');
+      console.log('⚠️ [clientLookupservice] Aucune abréviation trouvée');
       return;
     }
 
@@ -110,7 +110,7 @@ async function loadClientAbreviations() {
       }
     });
 
-    console.log(`✅ ${clientAbreviations.size} abréviations chargées`);
+    console.log(`✅ [clientLookupservice] ${clientAbreviations.size} abréviations chargées`);
   } catch (error) {
     console.error('❌ Erreur chargement abréviations:', error);
   }
@@ -119,23 +119,23 @@ async function loadClientAbreviations() {
 // Fonction principale de recherche
 module.exports.findClientByNameAndZone = async function (name, zone = null) {
   try {
-    console.log(` Début recherche - Nom: "${name}"`);
+    console.log(` [clientLookupservice] Début recherche - Nom: "${name}"`);
 
     // 1. Vérifier le cache des abréviations
     if (!clientAbreviations?.size) {
-      console.log(' Chargement initial des abréviations...');
+      console.log(' [clientLookupservice] Chargement initial des abréviations...');
       await loadClientAbreviations();
     }
 
     // 2. Recherche par abréviation
     const searchKeys = [normalizeString(name)];
-    console.log(' Clés de recherche:', searchKeys);
+    console.log(' [clientLookupservice] Clés de recherche:', searchKeys);
 
     // 3. Si trouvé par abréviation, retourner immédiatement
     for (const searchKey of searchKeys) {
       const match = clientAbreviations.get(searchKey);
       if (match) {
-        console.log('✅ (clientLookupService) Client trouvé par abréviation:', match);
+        console.log('✅ [clientLookupservice] Client trouvé par abréviation:', match);
 
         // Nouvelle vérification de l'ID Odoo
         if (!match.odooId) {

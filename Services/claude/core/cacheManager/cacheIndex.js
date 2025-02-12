@@ -1,4 +1,4 @@
-// cacheManager/cacheIndex.js
+// Services/claude/core/cacheManager/cacheIndex.js
 
 const NodeCache = require('node-cache');
 const cacheStore = require('./cacheStore');

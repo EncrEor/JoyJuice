@@ -70,8 +70,9 @@ async createDelivery(userId, deliveryData) {
 
     // Création via livraisonsService
     const result = await livraisonsService.addLivraison(livraisonData);
+    
     // Récupération du solde client
-    const soldeClient = await this.calculateClientBalance(deliveryData.clientId);
+    // const soldeClient = await this.calculateClientBalance(deliveryData.clientId);
     
     //console.log('✅ [DeliveryHandler] Résultat après ajout:', result);
 
@@ -83,7 +84,7 @@ async createDelivery(userId, deliveryData) {
           name: result.client?.name || deliveryData.clientName,
           id: result.client?.id || deliveryData.clientId,
           zone: result.client?.zone || deliveryData.zone,
-          solde: soldeClient // Ajout du solde ici
+          solde: result.client.solde // Ajout du solde ici
         }
       }
     };
@@ -210,24 +211,24 @@ async createDelivery(userId, deliveryData) {
  * @param {string} clientId - L'identifiant du client.
  * @returns {number} Le solde actuel du client.
  */
-  async calculateClientBalance(clientId) {
-    try {
-      console.log('💰 [DeliveryHandler] Calcul du solde client:', clientId);
-  
+ // async calculateClientBalance(clientId) {
+ //   try {
+ //     console.log('💰 [DeliveryHandler] Calcul du solde client:', clientId);
+ // 
       // Import du service Odoo
-      const odooSalesService = require('../../odooSalesService');
+ //     const odooSalesService = require('../../odooSalesService');
       
       // Récupération solde client depuis Odoo
-      const soldeOdoo = await odooSalesService.getCustomerBalance(clientId);
+ //     const soldeOdoo = await odooSalesService.getCustomerBalance(clientId);
   
-      console.log('💰 [DeliveryHandler] Solde Odoo récupéré:', soldeOdoo);
-      return soldeOdoo;
+ //     console.log('💰 [DeliveryHandler] Solde Odoo récupéré:', soldeOdoo);
+//      return soldeOdoo;
       
-    } catch (error) {
-      console.error('❌ [DeliveryHandler] Erreur lors du calcul du solde:', error);
-      throw ErrorUtils.createError('Erreur lors du calcul du solde client', 'BALANCE_CALCULATION_ERROR', error);
-    }
-  }
+//   } catch (error) {
+ //     console.error('❌ [DeliveryHandler] Erreur lors du calcul du solde:', error);
+ //     throw ErrorUtils.createError('Erreur lors du calcul du solde client', 'BALANCE_CALCULATION_ERROR', error);
+ //   }
+ // }
 
 }
 
