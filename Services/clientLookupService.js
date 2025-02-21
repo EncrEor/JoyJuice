@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const dotenv = require('dotenv');
 const ABREV_RANGE = 'abrev.clients!A2:G1000';
+const cacheStore = require('./claude/core/cacheManager/cacheStore'); // Ajustez le chemin si nécessaire
 
 let clientAbreviations = new Map();
 
@@ -122,10 +123,15 @@ module.exports.findClientByNameAndZone = async function (name, zone = null) {
     console.log(` [clientLookupservice] Début recherche - Nom: "${name}"`);
 
     // 1. Vérifier le cache des abréviations
-    if (!clientAbreviations?.size) {
-      console.log(' [clientLookupservice] Chargement initial des abréviations...');
-      await loadClientAbreviations();
-    }
+// Intégration avec le cache
+let abbreviations = cacheStore.getData('abbreviations');
+if (!abbreviations) {
+  console.log('Chargement initial des abréviations (non trouvées dans le cache)...');
+  await loadClientAbreviations();
+  // Conversion de la Map en objet simple
+  abbreviations = Object.fromEntries(clientAbreviations);
+  cacheStore.setData('abbreviations', abbreviations);
+}
 
     // 2. Recherche par abréviation
     const searchKeys = [normalizeString(name)];
@@ -135,23 +141,15 @@ module.exports.findClientByNameAndZone = async function (name, zone = null) {
     for (const searchKey of searchKeys) {
       const match = clientAbreviations.get(searchKey);
       if (match) {
-        console.log('✅ [clientLookupservice] Client trouvé par abréviation:', match);
-
-        // Nouvelle vérification de l'ID Odoo
-        if (!match.odooId) {
-          console.warn('⚠️ Client sans ID Odoo:', match.Nom_Client);
-          // Optionnel : throw new Error(`Client ${match.Nom_Client} sans ID Odoo`);
-        }
-
-        // Retour du client, en incluant éventuellement l'odooId
+        console.log('✅ (clientLookupService) Client trouvé par abréviation:', match);
+        // Retour du client en utilisant l'ID par défaut (qui est aussi l'ID Odoo)
         return {
           status: 'success',
           client: {
             ID_Client: match.ID_Client,
             Nom_Client: match.Nom_Client,
             DEFAULT: match.DEFAULT,
-            zone: match.zone,
-            odooId: match.odooId || null
+            zone: match.zone
           }
         };
       }
@@ -169,3 +167,14 @@ module.exports.findClientByNameAndZone = async function (name, zone = null) {
     throw error;
   }
 };
+
+
+// Ajoutez ces lignes à la fin de clientLookupService.js
+
+// Permet de récupérer la Map des abréviations
+module.exports.getClientAbreviationsMap = function () {
+  return clientAbreviations;
+};
+
+// Permet de déclencher le chargement des abréviations
+module.exports.loadClientAbreviations = loadClientAbreviations;

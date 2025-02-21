@@ -6,7 +6,7 @@ const eventManager = require('./eventManager');
 const CacheUtils = require('./cacheUtils');
 const DateUtils = require('./dateUtils');
 const { CACHE_CONFIG, CACHE_EVENTS } = require('./cacheConfig');
-
+const clientLookupService = require('../../../clientLookupService');
 const clientsService = require('../../../clientsService');
 const produitsService = require('../../../produitsService');
 const livraisonsService = require('../../../livraisonsService');
@@ -177,6 +177,21 @@ class CacheManager {
                 console.error('❌ Erreur initialisation produits:', productError);
                 throw new Error(`Échec initialisation produits: ${productError.message}`);
             }
+
+// 3. ABRÉVIATIONS
+try {
+    console.log('🔍 [cacheIndex] Récupération des abréviations clients...');
+    // Importer le service clientLookupService (ajustez le chemin si nécessaire)
+
+    await clientLookupService.loadClientAbreviations();
+    // Convertir la Map en objet simple
+    const abbreviationsObj = Object.fromEntries(clientLookupService.getClientAbreviationsMap());
+    cacheStore.setData('abbreviations', abbreviationsObj);
+    console.log(`✅ [cacheIndex] Abréviations mis en cache: ${Object.keys(abbreviationsObj).length} éléments`);
+} catch (error) {
+    console.error('❌ [cacheIndex] Erreur initialisation abréviations:', error);
+    throw new Error(`Échec initialisation abréviations: ${error.message}`);
+}
 
             // 4. VÉRIFICATION FINALE
             try {

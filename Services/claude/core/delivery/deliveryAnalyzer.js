@@ -88,6 +88,7 @@ class DeliveryAnalyzer {
   3. RÈGLE TRAITEMENT PAR LIGNE:
   
   a) SÉQUENCES DE CHIFFRES:
+  
   - 1ère séquence (la 1ere ligne de chiffre)= 
   SI le client sa valeur DEFAULT = 1 alors 1L : [C] [M] [F] [R] [CL]
   SI le client sa valeur DEFAULT = 25 alors 25CL : [C] [M] [F] [R] [CL]
@@ -98,7 +99,12 @@ class DeliveryAnalyzer {
   - 2EME SEQUENCE = 25CL : [C] [M] [F] [R] [CL]
     Ex: "1 1 1 1 1" → 1 C25CL, 1 M25CL, etc.
   
-  b) LIGNES SIMPLES:
+  b) AJUSTEMENTS SPÉCIFIQUES Si le message contient 2 sequences de chiffres:
+  - Les zéros comptent dans l'ordre de placement
+  - Une ligne comme "0 0 1" doit être interprétée comme 1 F1L (1ère ligne) ou 1 F25CL (2ème ligne)
+  - Une ligne comme "3 0 1" doit être interprétée comme 3 C1L et 1 F1L (1ère ligne) ou 3 C25CL et 1 F25CL (2ème ligne)
+
+  c) LIGNES SIMPLES:
   Format : [quantité] [produit] [contenance optionnelle]
   
   4. CONSTRUCTION DES ID PRODUITS:
@@ -225,45 +231,45 @@ Résultat attendu:
   async analyzeMessage(message) {
     try {
       console.log('📝 [DeliveryAnalyzer] Début analyse message:', message);
-  
+
       // 1. Préparation du message avec le contexte si nécessaire
       let processedMessage = message.trim();
       if (this.context.lastClient && !processedMessage.includes('\n')) {
         processedMessage = `${this.context.lastClient.Nom_Client}\n${processedMessage}`;
         console.log('📝 [DeliveryAnalyzer] Message enrichi avec client du contexte:', processedMessage);
       }
-  
+
       // 2. Extraction et validation du client
       const lines = processedMessage.split('\n');
       const clientName = lines[0].trim();
-      
+
       console.log('👤 [DeliveryAnalyzer] Recherche client:', clientName);
-      
+
       const clientResult = await clientLookupService.findClientByNameAndZone(clientName);
       if (!clientResult || clientResult.status !== 'success') {
         throw new Error(`Client non trouvé: ${clientName}`);
       }
-  
+
       // Récupérer la valeur DEFAULT depuis les abréviations
       const defaultValue = clientResult.client.DEFAULT || '1';
       //console.log('✅ Client trouvé:', {
       //  nom: clientResult.client.Nom_Client,
       //  zone: clientResult.client.zone,
-     //   DEFAULT: defaultValue
-     // });
-  
+      //   DEFAULT: defaultValue
+      // });
+
       // 3. Construction du message enrichi pour Claude avec la valeur DEFAULT
       const enrichedClientInfo = `Client ${clientResult.client.Nom_Client} (DEFAULT=${defaultValue})`;
       const restOfMessage = lines.slice(1).join('\n');
       const enrichedMessage = `${enrichedClientInfo}\n${restOfMessage}`;
-  
+
       console.log('📦 [DeliveryAnalyzer] Préparation analyse Claude:', {
         hasContext: !!this.context,
         hasSystemPrompt: !!this.systemPrompt,
         messageLength: enrichedMessage.length,
         defaultValue
       });
-  
+
       // 4. Appel à Claude pour l'analyse
       const response = await this.anthropic.messages.create({
         model: 'claude-3-5-sonnet-20241022',
@@ -275,29 +281,29 @@ Résultat attendu:
         }],
         system: `${this.systemPrompt}\n\nIMPORTANT: Ne fais AUCUN texte d'accompagnement. Renvoie uniquement un objet JSON valide sans aucune autre réponse.`
       });
-  
-// 5. Traitement et enrichissement du résultat
-const result = JSON.parse(response.content[0].text);
 
-// Enrichir avec toutes les données client trouvées par abréviation
-if (result.client) {
-  result.client = {
-    name: clientResult.client.Nom_Client, // Utiliser le nom complet trouvé
-    zone: result.client.zone,  // Garder la zone analysée
-    id: clientResult.client.ID_Client,
-    DEFAULT: clientResult.client.DEFAULT, // On s'assure que DEFAULT est copié
-    originalData: clientResult.client // On garde l'objet client complet
-  };
-}
+      // 5. Traitement et enrichissement du résultat
+      const result = JSON.parse(response.content[0].text);
 
-console.log('✅ [DeliveryAnalyzer] Analyse terminée:', {
-  client: result.client,
-  productsCount: result.products?.length,
-  defaultValue: clientResult.client.DEFAULT
-});
+      // Enrichir avec toutes les données client trouvées par abréviation
+      if (result.client) {
+        result.client = {
+          name: clientResult.client.Nom_Client, // Utiliser le nom complet trouvé
+          zone: result.client.zone,  // Garder la zone analysée
+          id: clientResult.client.ID_Client,
+          DEFAULT: clientResult.client.DEFAULT, // On s'assure que DEFAULT est copié
+          originalData: clientResult.client // On garde l'objet client complet
+        };
+      }
 
-return result;
-  
+      console.log('✅ [DeliveryAnalyzer] Analyse terminée:', {
+        client: result.client,
+        productsCount: result.products?.length,
+        defaultValue: clientResult.client.DEFAULT
+      });
+
+      return result;
+
     } catch (error) {
       console.error('❌ Erreur analyse message:', {
         message: error.message,
