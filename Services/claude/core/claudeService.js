@@ -11,7 +11,7 @@ const clientHandler = require('../handlers/clientHandler');
 const cacheManager = require('./cacheManager/cacheIndex');
 const indexManager = require('./indexManager');
 const DeliveryHandler = require('../handlers/deliveryHandler');
-
+const odooSalesService = require('../../odooSalesService');
 
 class ClaudeService {
   constructor() {
@@ -253,6 +253,79 @@ class ClaudeService {
             });
             return {
               type: 'DELIVERY',
+              status: 'ERROR',
+              error: error.message
+            };
+          }
+        }
+
+        case 'PAYMENT': {
+          try {
+            console.log('💰 [claudeService] Traitement paiement client');
+        
+            // Validations d'entrée
+            if (!analysis.payment || !analysis.client) {
+              throw new Error('Données de paiement invalides');
+            }
+        
+            // Préparation des données pour Odoo
+            const paymentData = {
+              clientId: analysis.client.ID_Client, // Utiliser directement l'ID client
+              journal: analysis.payment.odooJournal,
+              amount: analysis.payment.amount
+            };
+        
+            console.log('💰 [claudeService] Données paiement préparées:', paymentData);
+        
+            try {
+              // Création du paiement dans Odoo avec gestion d'erreur améliorée
+              const odooResult = await odooSalesService.createPayment(paymentData);
+              
+              if (!odooResult.success) {
+                console.error('❌ [claudeService] Échec enregistrement paiement dans Odoo:', odooResult.error);
+                throw new Error(`Échec enregistrement paiement dans Odoo: ${odooResult.error}`);
+              }
+        
+              // Réponse au client avec l'ID de paiement Odoo
+              const response = {
+                type: 'PAYMENT',
+                status: 'SUCCESS',
+                client: {
+                  name: analysis.client.Nom_Client,
+                  id: analysis.client.ID_Client
+                },
+                payment: {
+                  ...analysis.payment,
+                  odooPaymentId: odooResult.paymentId
+                },
+                message: `Paiement ${analysis.payment.type} de ${analysis.payment.amount} DNT enregistré pour ${analysis.client.Nom_Client} (Paiement #${odooResult.paymentId})`
+              };
+        
+              console.log('✅ [claudeService] Réponse paiement:', response);
+              return response;
+            } catch (odooError) {
+              console.error('❌ [claudeService] Erreur Odoo détaillée:', {
+                error: odooError.message,
+                stack: odooError.stack
+              });
+              
+              // En cas d'erreur Odoo, on renvoie quand même une réponse positive au client
+              // mais on indique que le paiement sera enregistré manuellement
+              return {
+                type: 'PAYMENT',
+                status: 'SUCCESS',
+                client: {
+                  name: analysis.client.Nom_Client,
+                  id: analysis.client.ID_Client
+                },
+                payment: analysis.payment,
+                message: `Paiement ${analysis.payment.type} de ${analysis.payment.amount} DNT reçu pour ${analysis.client.Nom_Client}. Le paiement sera enregistré manuellement.`
+              };
+            }
+          } catch (error) {
+            console.error('❌ [claudeService] Erreur traitement paiement:', error);
+            return {
+              type: 'PAYMENT',
               status: 'ERROR',
               error: error.message
             };

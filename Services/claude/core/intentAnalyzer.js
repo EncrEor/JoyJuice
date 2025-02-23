@@ -6,6 +6,7 @@ const ErrorUtils = require('../utils/errorUtils');
 const clientLookupService = require('../../clientLookupService');
 const cacheManager = require('./cacheManager/cacheIndex');
 const { validateResponse } = require('../utils/responseUtils');
+const PaymentAnalyzer = require('./payment/paymentAnalyzer');
 
 const DeliveryAnalyzer = require('./delivery/deliveryAnalyzer');
 
@@ -61,6 +62,25 @@ class IntentionAnalyzer {
     }`;
   }
 
+  detectMessageType(message) {
+    const firstLine = message.toLowerCase().trim().split('\n')[0];
+
+    if (/^(?:ch|vi|tr)$/.test(firstLine)) {
+      return 'PAYMENT';
+    }
+
+    if (/^(?:info|solde|tel|adresse|status|combien)\b/.test(firstLine)) {
+      return 'DEMANDE_INFO';
+    }
+
+    if (/^(?:bonjour|merci|au revoir|ok|oui|non)\b/.test(firstLine)) {
+      return 'CONVERSATION';
+    }
+
+    return 'DELIVERY';
+  }
+
+
   async analyzeContextualMessage(userId, message) {
     try {
       console.log('📥 [intentAnalyzer] Analyse message:', { userId, message: message.slice(0, 100) });
@@ -98,7 +118,16 @@ class IntentionAnalyzer {
 
       // Traitement selon type
       switch (messageType) {
-        case 'DEMANDE_INFO':
+        case 'PAYMENT': {
+          console.log('💰 [intentAnalyzer] Traitement d\'un message de paiement');
+          // Nous allons créer un nouveau handler pour les paiements
+          const paymentAnalyzer = new PaymentAnalyzer(context);
+          await paymentAnalyzer.initialize();
+          const result = await paymentAnalyzer.analyzeMessage(message);
+          return validateResponse(result);
+        }
+
+      case 'DEMANDE_INFO':
           return await messageHandler.processMessage(userId, message);
 
         case 'CONVERSATION':
@@ -123,20 +152,6 @@ class IntentionAnalyzer {
         error: { code: error.code || 'ANALYSIS_ERROR', message: error.message }
       };
     }
-  }
-
-  detectMessageType(message) {
-    const firstLine = message.toLowerCase().trim().split('\n')[0];
-
-    if (/^(?:info|solde|tel|adresse|status|combien)\b/.test(firstLine)) {
-      return 'DEMANDE_INFO';
-    }
-
-    if (/^(?:bonjour|merci|au revoir|ok|oui|non)\b/.test(firstLine)) {
-      return 'CONVERSATION';
-    }
-
-    return 'DELIVERY';
   }
 
   async retryClaudeCall(enrichedMessage) {

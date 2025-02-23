@@ -141,13 +141,10 @@ class OdooSalesService {
    */
 
 
-
-
-
   async getCustomerBalance(partnerId) {
     try {
       console.log(`💰 [odooSalesService] Récupération solde pour client ${partnerId}`);
-  
+
       // S'assurer d'être connecté à Odoo
       await this.ensureConnection();
       const models = odooAuth.getModelsClient();
@@ -156,7 +153,7 @@ class OdooSalesService {
         console.error("❌ [ERROR] Échec connexion à Odoo (models ou uid est null)");
         return 0;
       }
-  
+
       // 🔹 Vérification de l'existence du client
       let clientExists = await new Promise((resolve, reject) => {
         models.methodCall(
@@ -187,7 +184,7 @@ class OdooSalesService {
         console.error("❌ [ERROR] Client non trouvé dans Odoo.");
         return 0;
       }
-  
+
       // 🔹 Récupération des factures impayées (account.move)
       let unpaidInvoices = await new Promise((resolve, reject) => {
         models.methodCall(
@@ -200,8 +197,8 @@ class OdooSalesService {
             'search_read',
             [
               [['partner_id', '=', parseInt(partnerId)],
-               ['state', '=', 'posted'],
-               ['payment_state', '!=', 'paid']]
+              ['state', '=', 'posted'],
+              ['payment_state', '!=', 'paid']]
             ],
             { fields: ['id', 'amount_residual'] }
           ],
@@ -217,7 +214,7 @@ class OdooSalesService {
           }
         );
       });
-  
+
       // 🔹 Récupération des devis (sale.order en mode draft)
       let draftOrders = await new Promise((resolve, reject) => {
         models.methodCall(
@@ -230,7 +227,7 @@ class OdooSalesService {
             'search_read',
             [
               [['partner_id', '=', parseInt(partnerId)],
-               ['state', '=', 'draft']]
+              ['state', '=', 'draft']]
             ],
             { fields: ['id', 'amount_total'] }
           ],
@@ -246,7 +243,7 @@ class OdooSalesService {
           }
         );
       });
-  
+
       // 🔹 Récupération des commandes validées en attente de facturation (state = 'sale' et invoice_status = 'to invoice')
       let confirmedOrders = await new Promise((resolve, reject) => {
         models.methodCall(
@@ -259,8 +256,8 @@ class OdooSalesService {
             'search_read',
             [
               [['partner_id', '=', parseInt(partnerId)],
-               ['state', '=', 'sale'],
-               ['invoice_status', '=', 'to invoice']]
+              ['state', '=', 'sale'],
+              ['invoice_status', '=', 'to invoice']]
             ],
             { fields: ['id', 'amount_total'] }
           ],
@@ -276,18 +273,226 @@ class OdooSalesService {
           }
         );
       });
-  
+
       const unpaidOrders = draftOrders + confirmedOrders;
       const balance = unpaidInvoices + unpaidOrders;
       console.log(`✅ Solde client final: ${balance} DNT (Factures impayées + Devis + Commandes en attente de facturation)`);
       return balance;
-  
+
     } catch (error) {
       console.error('❌ [ERROR] Récupération solde client a échoué:', error);
       return 0;
     }
   }
 
+
+/**
+ * Crée un paiement client dans Odoo
+ * @param {Object} paymentData - Données du paiement
+ * @param {string} paymentData.clientId - ID du client (identique à l'ID Odoo)
+ * @param {string} paymentData.journal - Code du journal (CSH3, BNK1, TRT)
+ * @param {number} paymentData.amount - Montant du paiement
+ */
+
+async createPayment(paymentData) {
+  try {
+    console.log('💰 [odooSalesService] Début création paiement dans Odoo:', paymentData);
+
+    if (!paymentData.clientId) {
+      console.error('❌ [odooSalesService] ID client requis pour créer un paiement');
+      throw new Error('ID client requis pour créer un paiement');
+    }
+
+    // Vérifions d'abord si odooAuth est disponible
+    console.log('🔍 [odooSalesService] Vérification de odooAuth:', !!odooAuth);
+
+    try {
+      // S'assurer d'être connecté à Odoo
+      console.log('🔄 [odooSalesService] Tentative d\'authentification Odoo...');
+      await this.ensureConnection();
+      console.log('✅ [odooSalesService] Authentification Odoo réussie');
+    } catch (authError) {
+      console.error('❌ [odooSalesService] Erreur d\'authentification Odoo:', {
+        message: authError.message,
+        stack: authError.stack
+      });
+      throw new Error(`Échec connexion à Odoo: ${authError.message}`);
+    }
+
+    // Vérifier si models et uid sont disponibles
+    const models = odooAuth.getModelsClient();
+    const uid = odooAuth.getUid();
+    console.log('🔍 [odooSalesService] Vérification models et uid:', {
+      modelsExist: !!models,
+      uidExist: !!uid,
+      uid: uid
+    });
+
+    if (!models || !uid) {
+      console.error("❌ [odooSalesService] Models ou UID manquant");
+      throw new Error("Échec de la connexion à Odoo: Models ou UID manquant");
+    }
+
+    // Formatage des données
+    const now = new Date();
+    const formattedDate = now.toISOString().split('T')[0]; // Format YYYY-MM-DD
+
+    // S'assurer que l'ID client est numérique
+    let partnerId;
+    try {
+      partnerId = parseInt(paymentData.clientId, 10);
+      if (isNaN(partnerId)) {
+        throw new Error("ID client invalide (doit être un nombre)");
+      }
+      console.log('✅ [odooSalesService] ID Client valide:', partnerId);
+    } catch (parseError) {
+      console.error("❌ [odooSalesService] Échec de la conversion de l'ID client:", paymentData.clientId);
+      throw new Error(`ID client invalide: ${paymentData.clientId}`);
+    }
+
+    // Préparation des données de paiement pour Odoo
+    // Convertir le code journal en ID de journal
+    let journalId;
+    switch (paymentData.journal) {
+      case 'CSH3':
+        journalId = 28; // ID réel du journal de caisse dans Odoo
+        break;
+      case 'BNK1':
+        journalId = 22; // ID réel du journal bancaire dans Odoo
+        break;
+      case 'TRT':
+        journalId = 32; // ID réel du journal des traites dans Odoo
+        break;
+      default:
+        throw new Error(`Journal non reconnu: ${paymentData.journal}`);
+    }
+
+    console.log('✅ [odooSalesService] Journal ID récupéré:', journalId);
+
+    // Mise à jour de l'objet de paiement pour inclure les champs requis
+    const paymentVals = {
+      partner_id: partnerId,
+      payment_type: 'inbound',   // Du client vers l'entreprise
+      partner_type: 'customer',
+      journal_id: journalId,     // Utiliser l'ID numérique du journal
+      amount: paymentData.amount,
+      date: formattedDate,       // Champ requis (remplace payment_date)
+      payment_method_id: 1,      // cash method id
+      company_id: 1,             // Valeur par défaut (à ajuster si nécessaire)
+      state: 'draft'             // Valeur par défaut pour l'état
+    };
+
+    console.log('📑 [odooSalesService] Données préparées pour Odoo:', paymentVals);
+
+    // --- Nouvelle section : Débogage des champs requis ---
+    models.methodCall('execute_kw', [
+      odooAuth.db,
+      uid,
+      odooAuth.password,
+      'account.payment',
+      'fields_get',
+      [],
+      { attributes: ['required', 'type', 'string'] }
+    ], (error, fields) => {
+      if (error) {
+        console.error('❌ Erreur récupération structure du modèle:', error);
+      } else {
+        const requiredFields = Object.entries(fields)
+          .filter(([_, props]) => props.required)
+          .map(([field, props]) => ({ field, type: props.type, label: props.string }));
+        console.log('📋 Champs requis pour account.payment:', requiredFields);
+      }
+    });
+    // --- Fin de la section de débogage ---
+
+    // Création d'une Promise avec un timeout pour éviter un blocage indéfini
+    return new Promise((resolve, reject) => {
+      // Ajouter un timeout de 10 secondes
+      const timeout = setTimeout(() => {
+        reject(new Error('Timeout lors de la création du paiement Odoo'));
+      }, 10000);
+
+      console.log('🔄 [odooSalesService] Appel à Odoo pour créer le paiement...');
+      console.log('📤 Payload complet:', [
+        odooAuth.db,
+        uid,
+        odooAuth.password,
+        'account.payment',
+        'create',
+        [paymentVals]
+      ]);
+
+      // Appel de test préliminaire pour vérifier l'API
+      models.methodCall('execute_kw', [
+        odooAuth.db,
+        uid,
+        odooAuth.password,
+        'account.journal',  // Utilisation d'un modèle différent pour tester
+        'search_count',
+        [[]]
+      ], (searchError, journalCount) => {
+        if (searchError) {
+          console.error('❌ Echec de la recherche préliminaire:', searchError);
+          clearTimeout(timeout);
+          reject(searchError);
+          return;
+        }
+
+        console.log('✅ Test préliminaire réussi, nombre de journaux:', journalCount);
+
+        // Maintenant, tentative de création effective du paiement
+        models.methodCall('execute_kw', [
+          odooAuth.db,
+          uid,
+          odooAuth.password,
+          'account.payment',
+          'create',
+          [paymentVals]
+        ], (error, paymentId) => {
+          clearTimeout(timeout); // Annuler le timeout
+
+          if (error) {
+            console.error('❌ [odooSalesService] Erreur création paiement Odoo:', {
+              message: error.message || 'Erreur sans message',
+              code: error.code || 'Pas de code',
+              data: error.data || 'Pas de données d\'erreur',
+              name: error.name || 'Erreur sans nom',
+              stack: error.stack || 'Pas de stack'
+            });
+
+            const errorDetails = {
+              message: error.message || 'Pas de message',
+              code: error.code || 'Pas de code',
+              faultCode: error.faultCode || 'Pas de faultCode',
+              faultString: error.faultString || 'Pas de faultString',
+              keys: Object.keys(error || {})
+            };
+            console.error('📝 Détails supplémentaires de l\'erreur:', errorDetails);
+
+            reject(error);
+            return;
+          }
+
+          console.log('✅ [odooSalesService] Paiement créé dans Odoo avec l\'ID:', paymentId);
+          resolve({
+            success: true,
+            paymentId: paymentId,
+            amount: paymentData.amount
+          });
+        });
+      });
+    });
+  } catch (error) {
+    console.error('❌ [odooSalesService] Erreur générale création paiement:', {
+      message: error.message || 'Erreur inconnue',
+      stack: error.stack
+    });
+    return {
+      success: false,
+      error: error.message || 'Erreur inconnue'
+    };
+  }
+}
 
 
 
