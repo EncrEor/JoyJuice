@@ -96,11 +96,17 @@ router.post('/', async (req, res) => {
                     details: validation.errors
                 }
             });
-        }
+        }   
 
         // 2. Traitement du message
         console.log(`📩 Message reçu de ${userId}: ${message}`);
         const response = await claudeService.processMessage(userId, message);
+        
+        // Si la réponse est vide ou de type UNKNOWN, on renvoie un statut 204 (No Content)
+        if (!response || response.type === 'UNKNOWN') {
+        console.log('[chat.js] Message de type UNKNOWN, aucune réponse renvoyée');
+        return res.status(204).send();
+        }
 
         // 3. Formatage et envoi de la réponse
         const formattedResponse = formatResponse(response);

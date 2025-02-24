@@ -66,17 +66,18 @@ class ClaudeService {
       const initialContext = await contextManager.getConversationContext(userId);
       console.log('🔍 [claudeService] Contexte initial récupéré:', initialContext);
 
-      //if (!Context) {
-      //throw new Error('[claudeService] Contexte non disponible');
-      //}
-
       // 2. Analyse avec conservation du contexte
       const analysis = await intentAnalyzer.analyzeContextualMessage(userId, message);
+
+      // Si le type est UNKNOWN, on retourne silencieusement
+      if (analysis.type === 'UNKNOWN') {
+        console.log('⏭️ [claudeService] Message ignoré (type UNKNOWN)');
+        return null; // Retour immédiat, pas de traitement supplémentaire
+    }
 
       // Récupération du contexte mis à jour après l'analyse (pour intégrer l'enrichissement produits)
       const updatedContext = await contextManager.getConversationContext(userId);
       console.log('🔍 [claudeService] Contexte mis à jour récupéré:', updatedContext);
-
 
       // 3. Exécution de l'action
       const actionResult = await this.executeAction(analysis, updatedContext);
@@ -262,30 +263,30 @@ class ClaudeService {
         case 'PAYMENT': {
           try {
             console.log('💰 [claudeService] Traitement paiement client');
-        
+
             // Validations d'entrée
             if (!analysis.payment || !analysis.client) {
               throw new Error('Données de paiement invalides');
             }
-        
+
             // Préparation des données pour Odoo
             const paymentData = {
               clientId: analysis.client.ID_Client, // Utiliser directement l'ID client
               journal: analysis.payment.odooJournal,
               amount: analysis.payment.amount
             };
-        
+
             console.log('💰 [claudeService] Données paiement préparées:', paymentData);
-        
+
             try {
               // Création du paiement dans Odoo avec gestion d'erreur améliorée
               const odooResult = await odooSalesService.createPayment(paymentData);
-              
+
               if (!odooResult.success) {
                 console.error('❌ [claudeService] Échec enregistrement paiement dans Odoo:', odooResult.error);
                 throw new Error(`Échec enregistrement paiement dans Odoo: ${odooResult.error}`);
               }
-        
+
               // Réponse au client avec l'ID de paiement Odoo
               const response = {
                 type: 'PAYMENT',
@@ -300,7 +301,7 @@ class ClaudeService {
                 },
                 message: `Paiement ${analysis.payment.type} de ${analysis.payment.amount} DNT enregistré pour ${analysis.client.Nom_Client} (Paiement #${odooResult.paymentId})`
               };
-        
+
               console.log('✅ [claudeService] Réponse paiement:', response);
               return response;
             } catch (odooError) {
@@ -308,7 +309,7 @@ class ClaudeService {
                 error: odooError.message,
                 stack: odooError.stack
               });
-              
+
               // En cas d'erreur Odoo, on renvoie quand même une réponse positive au client
               // mais on indique que le paiement sera enregistré manuellement
               return {

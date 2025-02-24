@@ -63,96 +63,132 @@ class IntentionAnalyzer {
   }
 
   detectMessageType(message) {
-    const firstLine = message.toLowerCase().trim().split('\n')[0];
+    const lines = message.toLowerCase().trim().split('\n');
+    const firstLine = lines[0];
 
+    // 1. Vérifie d'abord les types spécifiques non-livraison
     if (/^(?:ch|vi|tr)$/.test(firstLine)) {
-      return 'PAYMENT';
+        return 'PAYMENT';
     }
 
     if (/^(?:info|solde|tel|adresse|status|combien)\b/.test(firstLine)) {
-      return 'DEMANDE_INFO';
+        return 'DEMANDE_INFO';
     }
 
     if (/^(?:bonjour|merci|au revoir|ok|oui|non)\b/.test(firstLine)) {
-      return 'CONVERSATION';
+        return 'CONVERSATION';
     }
 
-    return 'DELIVERY';
-  }
+    // 2. Pour une livraison : 
+    // Première règle stricte : au moins 2 lignes
+    if (lines.length < 2) {
+        return 'UNKNOWN';
+    }
 
+    // Vérifie si une des lignes suivantes contient un format de commande valide
+    const hasOrderLine = lines.slice(1).some(line => {
+        return (
+            // Série de chiffres séparés par des espaces
+            /^\s*\d+(\s+\d+)*\s*$/.test(line) ||
+            // Quantité + produit (ex: "3 mg", "2 f")
+            /^\s*\d+\s*[cmfrkasy]/i.test(line) ||
+            // Format avec mg, cl à la fin sans espace
+            /\d+(?:mg|cl|ml|f|c|m|r|k|as|ss|y|gw)\b/i.test(line) ||
+            // Attribut "surgélé"
+            /^(surgel[ée]s?|surgl)/i.test(line) ||
+            // Format quantité + contenance (ex: "5 f 25")
+            /^\s*\d+\s+[cmfrkasy]\s+25$/i.test(line)
+        );
+    });
 
-  async analyzeContextualMessage(userId, message) {
-    try {
+    if (hasOrderLine) {
+        return 'DELIVERY';
+    }
+
+    return 'UNKNOWN';
+}
+
+async analyzeContextualMessage(userId, message) {
+  try {
       console.log('📥 [intentAnalyzer] Analyse message:', { userId, message: message.slice(0, 100) });
 
+      // 1. Validation initiale
       if (!userId || !message?.trim()) {
-        throw ErrorUtils.createError('Paramètres invalides', 'INVALID_PARAMS');
+          throw ErrorUtils.createError('Paramètres invalides', 'INVALID_PARAMS');
       }
 
-      const context = await contextManager.getConversationContext(userId);
-      //console.log('📑 [intentAnalyzer] Contexte récupéré:', {
-      //  hasLastClient: !!context?.lastClient,
-      //  hasLastAnalysis: !!context?.lastAnalysisResult
-      //});
-
-      // Enrichissement contexte avec produits
-      try {
-        const cacheStore = await cacheManager.getCacheStoreInstance();
-        if (cacheStore) {
-          const products = cacheStore.getData('products');
-          if (products?.byId) {
-            // Mise à jour du contexte via contextManager
-            await contextManager.updateConversationContext(userId, {
-              products: products
-            });
-            console.log(`✅ ${Object.keys(products.byId).length} produits mis en contexte`);
-          }
-        }
-      } catch (cacheError) {
-        console.error('❌ Erreur cache:', cacheError);
-      }
-
-      // Détection du type
+      // 2. Détection immédiate du type
       const messageType = this.detectMessageType(message);
       console.log('🎯 [intentAnalyzer] Type détecté:', messageType);
 
-      // Traitement selon type
-      switch (messageType) {
-        case 'PAYMENT': {
-          console.log('💰 [intentAnalyzer] Traitement d\'un message de paiement');
-          // Nous allons créer un nouveau handler pour les paiements
-          const paymentAnalyzer = new PaymentAnalyzer(context);
-          await paymentAnalyzer.initialize();
-          const result = await paymentAnalyzer.analyzeMessage(message);
-          return validateResponse(result);
-        }
-
-      case 'DEMANDE_INFO':
-          return await messageHandler.processMessage(userId, message);
-
-        case 'CONVERSATION':
+      // 3. Arrêt immédiat si UNKNOWN
+      if (messageType === 'UNKNOWN') {
+          console.log('⏭️ [intentAnalyzer] Message ignoré (type UNKNOWN)');
           return {
-            type: 'CONVERSATION',
-            intention_details: await naturalResponder.generateResponse({ message, context })
+              type: 'UNKNOWN'
           };
-
-        default: { // DELIVERY par défaut
-          const deliveryAnalyzer = new DeliveryAnalyzer(context);
-          await deliveryAnalyzer.initialize();
-          const result = await deliveryAnalyzer.analyzeMessage(message);
-          //console.log("📤 [DEBUG] Avant validation de intentAnalyzer:", JSON.stringify(result, null, 2));
-          return validateResponse(result);
-        }
       }
 
-    } catch (error) {
+      // 4. Chargement du contexte de base
+      const context = await contextManager.getConversationContext(userId);
+
+      // 5. Enrichissement du contexte selon les besoins
+      if (['DELIVERY', 'PAYMENT'].includes(messageType)) {
+          // Chargement des clients et abréviations nécessaires pour DELIVERY et PAYMENT
+          try {
+              const cacheStore = await cacheManager.getCacheStoreInstance();
+              if (cacheStore) {
+                  // Chargement des produits uniquement pour DELIVERY
+                  if (messageType === 'DELIVERY') {
+                      const products = cacheStore.getData('products');
+                      if (products?.byId) {
+                          await contextManager.updateConversationContext(userId, {
+                              products: products
+                          });
+                          console.log(`✅ ${Object.keys(products.byId).length} produits mis en contexte`);
+                      }
+                  }
+              }
+          } catch (cacheError) {
+              console.error('❌ Erreur cache:', cacheError);
+          }
+      }
+
+      // 6. Traitement spécifique selon le type
+      switch (messageType) {
+          case 'PAYMENT': {
+              console.log('💰 [intentAnalyzer] Traitement message de paiement');
+              const paymentAnalyzer = new PaymentAnalyzer(context);
+              await paymentAnalyzer.initialize();
+              const result = await paymentAnalyzer.analyzeMessage(message);
+              return validateResponse(result);
+          }
+
+          case 'DEMANDE_INFO':
+              return await messageHandler.processMessage(userId, message);
+
+          case 'CONVERSATION':
+              return {
+                  type: 'CONVERSATION',
+                  intention_details: await naturalResponder.generateResponse({ message, context })
+              };
+
+          case 'DELIVERY': {
+              const deliveryAnalyzer = new DeliveryAnalyzer(context);
+              await deliveryAnalyzer.initialize();
+              const result = await deliveryAnalyzer.analyzeMessage(message);
+              return validateResponse(result);
+          }
+      }
+
+  } catch (error) {
       console.error('❌ [intentAnalyzer] Erreur analyse:', error);
       return {
-        type: 'ERROR',
-        error: { code: error.code || 'ANALYSIS_ERROR', message: error.message }
+          type: 'ERROR',
+          error: { code: error.code || 'ANALYSIS_ERROR', message: error.message }
       };
-    }
   }
+}
 
   async retryClaudeCall(enrichedMessage) {
     try {
