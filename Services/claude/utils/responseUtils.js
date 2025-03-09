@@ -135,19 +135,19 @@ const ResponseTypes = {
                       }
                   };
                   break;
-              case ResponseTypes.ERROR:
-                  formattedResponse = {
-                      success: false,
-                      data: {
-                          type: ResponseTypes.ERROR,
-                          message: validatedResponse.message || 'Une erreur est survenue',
-                          error: {
-                              code: validatedResponse.error?.code || 'UNKNOWN_ERROR',
-                              details: validatedResponse.error?.details || "Donnée manquante"
-                          }
-                      }
-                  };
-                  break;
+                  case ResponseTypes.ERROR:
+                    formattedResponse = {
+                        success: false,
+                        data: {
+                            type: ResponseTypes.ERROR,
+                            message: validatedResponse.error?.message || validatedResponse.message || 'Une erreur est survenue',
+                            error: {
+                                code: validatedResponse.error?.code || 'UNKNOWN_ERROR',
+                                details: validatedResponse.error?.details || "Donnée manquante"
+                            }
+                        }
+                    };
+                    break;
               default:
                   formattedResponse = {
                       success: true,

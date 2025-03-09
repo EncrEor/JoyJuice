@@ -11,16 +11,33 @@ class ErrorUtils {
   }
 
   static handleClientError(error) {
-    const errorTypes = {
-      CLIENT_NOT_FOUND: 'Client non trouvé',
-      MULTIPLE_MATCHES: 'Client présent dans plusieurs zones',
-      INVALID_ZONE: 'Zone invalide',
-      MISSING_DATA: 'Données client manquantes'
-    };
+    let message;
+    const details = error.details || {};
 
-    const message = errorTypes[error.code] || error.message;
-    return this.createError(message, error.code, error.details);
-  }
+    switch(error.code) {
+        case 'CLIENT_NOT_FOUND':
+            message = `Client "${error.clientName || 'inconnu'}" non trouvé`;
+            break;
+        case 'MULTIPLE_MATCHES':
+            message = `Client présent dans plusieurs zones${error.zones ? ': ' + error.zones.join(', ') : ''}`;
+            break;
+        case 'INVALID_ZONE':
+            message = `Zone "${error.zone || ''}" invalide pour le client "${error.clientName || 'inconnu'}"`;
+            break;
+        case 'MISSING_DATA':
+            message = 'Données client manquantes';
+            break;
+        default:
+            message = error.message || 'Erreur client inconnue';
+    }
+
+    return this.createError(message, error.code, {
+        clientName: error.clientName,
+        zones: error.zones,
+        originalError: error.message,
+        ...details
+    });
+}
 
   static handleLivraisonError(error) {
     const errorTypes = {

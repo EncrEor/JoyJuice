@@ -1,0 +1,205 @@
+<div style="text-align: center; background-color: transparent; padding: 20px 0;">
+  <h2 style="margin-bottom: 10px; font-size: 36px; font-weight: bold;">
+    Trouver le point de vente partenaire le plus proche de chez vous.
+  </h2>
+
+  <div class="swiper-container" style="width: 100%; margin: 0 auto;">
+    <div class="swiper-wrapper">
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+          <a href="https://www.facebook.com/the716menzah6/?locale=fr_FR" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+            <img src="https://joy-juice.odoo.com/web/image/3172-cf377d7f/716_CARRE.jpg?height=256" alt="The 716" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+          </a>
+          <div style="margin-top: 5px; font-size: 16px; color: #333;">
+            The 716
+          </div>
+        </div>
+
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/profile.php/?id=100086995430400" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3163-0c14ff3f/Yousfi_carre.jpg?height=256" alt="Yousfi Market" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Yousfi Market
+        </div>
+      </div>
+
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.instagram.com/delpaneboulangerie/" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3239-de26f141/del%20pane.jpeg?height=256 " alt="Yousfi Market" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Boulangerie Del Pane
+        </div>
+      </div>
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/profile.php?id=61559215977368" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3168-4970f74a/khadija_carre.jpg?height=256" alt="Khadija (Borj)" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Khadija
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/racinesgourmandestunisie/" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src=" https://joy-juice.odoo.com/web/image/3160-46be9406/racine_carre.jpg?height=256" alt="Racines Gourmandes" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Racines Gourmandes
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/fraisdici1/" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3159-2a253ef2/fraiscarre.jpg?height=256" alt="Frais d'ici" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Frais d'ici
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/boulangerie.ariana/" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3165-8ee375c3/alliance_carre.jpg?height=256" alt="L'alliance" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Boulangerie L'alliance
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/p/Restaurant-Bombay-100063331802968/?locale=fr_FR" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3164-1e21c564/bombay_carre.jpg?height=256" alt="Bombay" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Bombay
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/BenKsouriShop/?_rdr" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3162-5895712c/ksouri_carre.jpg?height=256" alt="Ben Ksouri shop" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Ben Ksouri Shop
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://bengaidhassinemarket.com/index.php" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3171-80300230/BGH_carre.jpg?height=256" alt="BGH" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          BGH
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/downtown.lounge.laouina/" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src=" https://joy-juice.odoo.com/web/image/3170-c486870b/downtown_carre.jpg?height=256" alt="downTown" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          DownTown
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://larosesucree.tn/" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3161-e0b78309/larose_carre.jpg?height=256" alt="La Rose sucrée" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          La Rose sucrée
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/profile.php?id=100063634210047" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src=" https://joy-juice.odoo.com/web/image/3167-3c1c64e9/DS_carre.jpg?height=256" alt="DS Club" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          DS Club
+        </div>
+      </div>
+
+      
+      <div class="swiper-slide" style="display: flex; flex-direction: column; align-items: center;">
+        <a href="https://www.facebook.com/idealoungeaouina/?locale=fr_FR" target="_blank" style="width:120px; height:120px; border-radius:50%; overflow:hidden; display:inline-block;">
+          <img src="https://joy-juice.odoo.com/web/image/3169-e8936590/IDEA_CARRE.jpg?height=256" alt="Idea Club" style="width:100%; height:100%; object-fit:cover;" loading="lazy">
+        </a>
+        <div style="margin-top: 5px; font-size: 16px; color: #333;">
+          Idea Club
+        </div>
+      </div>
+
+    </div>
+
+    <div class="swiper-button-prev"></div>
+    <div class="swiper-button-next"></div>
+    <div class="swiper-pagination"></div>
+  </div>
+</div>
+
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.css">
+
+
+<script src="https://cdn.jsdelivr.net/npm/swiper@9/swiper-bundle.min.js"></script>
+
+<style>
+/* Empêche les débordements hors du conteneur */
+.swiper-container {
+  overflow: hidden;
+}
+
+  .swiper-button-prev,
+  .swiper-button-next {
+    color: #888 !important;
+    top: 70% !important; 
+    transform: translateY(-50%);
+  }
+  .swiper-pagination {
+    top: 95% !important; 
+  }
+  .swiper-slide {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+</style>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const swiper = new Swiper('.swiper-container', {
+      loop: true,
+      spaceBetween: 0,  // pas d'espace supplémentaire
+      navigation: {
+        nextEl: '.swiper-button-next',
+        prevEl: '.swiper-button-prev',
+      },
+      pagination: {
+        el: '.swiper-pagination',
+        clickable: true,
+      },
+      // On augmente slidesPerView pour réduire l'espace visuel entre les logos
+      breakpoints: {
+        1600: { slidesPerView: 6 },  // grands écrans : 6 logos en même temps
+        1200: { slidesPerView: 5 },
+        992:  { slidesPerView: 4 },
+        768:  { slidesPerView: 3 },
+        576:  { slidesPerView: 2 },
+        0:    { slidesPerView: 1 },
+      }
+    });
+  });
+</script>

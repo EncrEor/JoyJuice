@@ -73,7 +73,7 @@ class ClaudeService {
       if (analysis.type === 'UNKNOWN') {
         console.log('⏭️ [claudeService] Message ignoré (type UNKNOWN)');
         return null; // Retour immédiat, pas de traitement supplémentaire
-    }
+      }
 
       // Récupération du contexte mis à jour après l'analyse (pour intégrer l'enrichissement produits)
       const updatedContext = await contextManager.getConversationContext(userId);
@@ -187,6 +187,18 @@ class ClaudeService {
     try {
       console.log('⚡ (claudeService) Exécution action:', analysis.type);
 
+        // 1. Si l'analyse est déjà une erreur, la formater directement
+        if (analysis.type === 'ERROR') {
+          return {
+              type: 'ERROR',
+              status: 'ERROR',
+              error: analysis.error,
+              message: analysis.error.message
+          };
+      }
+
+      // 2. Sinon, procéder avec le switch normal
+
       switch (analysis.type) {
         case 'DELIVERY': {
           try {
@@ -211,7 +223,7 @@ class ClaudeService {
             };
 
 
-            console.log('🔄 (claudeService) DeliveryData préparées:'); //, deliveryData);
+            //console.log('🔄 (claudeService) DeliveryData préparées:'); //, deliveryData);
 
 
             console.log('📦 (claudeService) Contexte passé à DeliveryHandler:', {
@@ -255,10 +267,14 @@ class ClaudeService {
             return {
               type: 'DELIVERY',
               status: 'ERROR',
-              error: error.message
+              error: {
+                code: error.code || 'DELIVERY_ERROR',
+                message: error.message || 'Erreur lors de la création de la livraison'
+              }
             };
           }
         }
+        
 
         case 'PAYMENT': {
           try {
@@ -364,9 +380,11 @@ class ClaudeService {
       console.error('❌ Erreur executeAction:', error);
       return {
         status: 'ERROR',
-        code: error.code || 'EXECUTION_ERROR',
-        message: error.message || "Erreur lors de l'exécution de l'action",
-        details: error.details || null
+        error: {
+          code: error.code || 'EXECUTION_ERROR',
+          message: error.message || 'Une erreur est survenue',
+          details: error.details || null
+        }
       };
     }
   }

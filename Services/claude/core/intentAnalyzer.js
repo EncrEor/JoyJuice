@@ -176,8 +176,32 @@ async analyzeContextualMessage(userId, message) {
           case 'DELIVERY': {
               const deliveryAnalyzer = new DeliveryAnalyzer(context);
               await deliveryAnalyzer.initialize();
-              const result = await deliveryAnalyzer.analyzeMessage(message);
-              return validateResponse(result);
+              try {
+                  const result = await deliveryAnalyzer.analyzeMessage(message);
+                  return validateResponse(result);
+              } catch (error) {
+                  console.error('❌ [intentAnalyzer] Erreur dans DeliveryAnalyzer:', error);
+                  
+                  // Amélioration : détection des erreurs spécifiques
+                  if (error.code === 'CLIENT_NOT_FOUND') {
+                      return {
+                          type: 'ERROR',
+                          error: { 
+                              code: 'CLIENT_NOT_FOUND',
+                              message: `Client "${error.clientName}" non trouvé`,
+                              clientName: error.clientName
+                          }
+                      };
+                  }
+                  
+                  return {
+                      type: 'ERROR',
+                      error: { 
+                          code: error.code || 'DELIVERY_ANALYSIS_ERROR',
+                          message: error.message || 'Erreur lors de l\'analyse de la livraison'
+                      }
+                  };
+              }
           }
       }
 

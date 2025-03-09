@@ -34,13 +34,25 @@ function formatResponse(response) {
         };
     }
 
-    // Format par défaut pour les erreurs
+    // Si la réponse est une erreur - AMÉLIORATION ICI
     if (response?.status === 'ERROR' || response?.type === 'ERROR') {
+        // Gestion améliorée des codes d'erreur
+        let errorMessage = response.error?.message || response.message || 'Une erreur est survenue';
+        
+        // Personnalisation des messages selon le code d'erreur
+        if (response.error?.code === 'CLIENT_NOT_FOUND') {
+            errorMessage = `Client non trouvé: ${response.error.clientName || 'nom inconnu'}`;
+        } else if (response.error?.code === 'VALIDATION_ERROR') {
+            errorMessage = `Erreur de validation: ${errorMessage}`;
+        } else if (response.error?.code === 'UNSUPPORTED_ACTION') {
+            errorMessage = `Action non prise en charge: ${errorMessage}`;
+        }
+        
         return {
             success: false,
             data: {
                 type: 'ERROR',
-                message: response.message || 'Une erreur est survenue',
+                message: errorMessage,
                 error: {
                     code: response.error?.code || 'UNKNOWN_ERROR',
                     details: response.error?.details

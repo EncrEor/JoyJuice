@@ -1,0 +1,208 @@
+<div id="map" style="width: 100%; height: 500px;"></div>
+
+<script>
+  function initMap() {
+    // Création de la carte avec masquage des POI
+    const map = new google.maps.Map(document.getElementById("map"), {
+      center: { lat: 36.81, lng: 10.18 },
+      zoom: 12,
+      styles: [
+        { featureType: "poi", stylers: [{ visibility: "off" }] }
+      ]
+    });
+
+    // Service Places pour récupérer les détails des lieux définis par placeId
+    const service = new google.maps.places.PlacesService(map);
+
+    // Liste de lieux : un mélange de lieu avec placeId et définis par coordonnées
+    const locations = [
+      // 1) Downtown Bardo (placeId)
+      { 
+        placeId: "ChIJEcbhMG4z_RIRpNDM6Jxlb9E"
+      },
+      // 2) La Tunisoise Laouina (coordonnées)
+      {
+        position: { lat: 36.859047, lng: 10.256774 },
+        title: "La Tunisoise Aouina"
+      },
+      // 3) Downtown Laouina
+      {
+        position: { lat: 36.858459, lng: 10.256363 },
+        title: "Downtown Aouina"
+      },
+      // 4) Racines gourmandes Menzah7
+      {
+        position: { lat: 36.852003, lng: 10.158114 },
+        title: "Racines gourmandes Menzah7"
+      },
+      // 5) Bel Kayed Hsine Ennasr
+      {
+        position: { lat: 36.858797, lng: 10.161619 },
+        title: "BGH Ennasr"
+      },
+      // 6) Al Fol Cité Nozha
+      {
+        position: { lat: 36.862819, lng: 10.197214 },
+        title: "Al Fol Cité Nozha"
+      },
+      // 7) Frais d'ici
+      {
+        position: { lat: 36.86137, lng: 10.169943 },
+        title: "Frais d'ici"
+      },
+      // 8) Khadija Borj Louzir
+      {
+        position: { lat: 36.866436, lng: 10.205254 },
+        title: "Khadija Borj Louzir"
+      },
+      // 9) La rose Sucrée
+      {
+        position: { lat: 36.8817704, lng: 10.1754349 },
+        title: "La Rose sucrée"
+      },
+      // 10) The 716 (placeId)
+      { 
+        placeId: "ChIJW0wKSlcz_RIRXTzTTIrr_p0"
+      },
+      // 11) Yousfi market (placeId)
+      { 
+        placeId: "ChIJoe6owkXL4hIRvCNj0psiKf0"
+      },
+      // 12) BenKsouri Shop (placeId)
+      { 
+        placeId: "ChIJX_LCK1LL4hIRdln-ujTO388"
+      },
+      // 13) Boulangerie Del Pane (placeId)
+      { 
+        placeId: "ChIJdXEVBh4z_RIRyI1Vkyp873Y"
+      },
+      // Nouveaux partenaires Joy Juice
+      {
+        position: { lat: 36.857273, lng: 10.256552 },
+        title: "Fresh Plaza L'Aouina"
+      },
+      {
+        position: { lat: 36.853714, lng: 10.287079 },
+        title: "Les Délices"
+      },
+      {
+        position: { lat: 36.880924, lng: 10.228672 },
+        title: "Hafsa"
+      },
+      {
+        position: { lat: 36.895119, lng: 10.181244 },
+        title: "Alliance Al Ghazela"
+      },
+      {
+        position: { lat: 36.860645, lng: 10.180360 },
+        title: "Boulangerie Aziz"
+      }
+    ];
+
+    // Mapping des titres aux URL des logos (nouvelles images)
+    const titleToIcon = {
+      "Downtown Bardo": "https://joy-juice.odoo.com/web/image/3170-c486870b/downtown_carre.jpg?height=256",
+      "La Tunisoise Aouina": "https://joy-juice.odoo.com/web/image/3232-78ad8e37/tunisoise.jpg?height=256",
+      "Downtown Aouina": "https://joy-juice.odoo.com/web/image/3170-c486870b/downtown_carre.jpg?height=256",
+      "Racines gourmandes Menzah7": "https://joy-juice.odoo.com/web/image/3160-46be9406/racine_carre.jpg?height=256",
+      "BGH Ennasr": "https://joy-juice.odoo.com/web/image/3171-80300230/BGH_carre.jpg?height=256",
+      "Al Fol Cité Nozha": "https://joy-juice.odoo.com/web/image/2871-da916d98/Capture%20d’écran%202025-02-25%20à%2014.08.17.png?height=256",
+      "Frais d'ici": "https://joy-juice.odoo.com/web/image/3159-2a253ef2/fraiscarre.jpg?height=256",
+      "Khadija Borj Louzir": "https://joy-juice.odoo.com/web/image/3168-4970f74a/khadija_carre.jpg?height=256",
+      "The 716 Menzah 6": "https://joy-juice.odoo.com/web/image/3172-cf377d7f/716_CARRE.jpg?height=256",
+      "La Rose sucrée": "https://joy-juice.odoo.com/web/image/3161-e0b78309/larose_carre.jpg?height=256",
+      "Yousfi market": "https://joy-juice.odoo.com/web/image/3163-0c14ff3f/Yousfi_carre.jpg?height=256",
+      "BenKsouri Shop": "https://joy-juice.odoo.com/web/image/3162-5895712c/ksouri_carre.jpg?height=256",
+      "Boulangerie Del Pane": "https://joy-juice.odoo.com/web/image/3239-de26f141/del%20pane.jpeg?height=256",
+      // Nouveaux partenaires Joy Juice (utilisation de l'icône fournie)
+      "Fresh Plaza L'Aouina": "https://joy-juice.odoo.com/web/image/3323-7bf03810/Fresh%20Plaza.jpeg?height=256",
+      "Les Délices": "https://joy-juice.odoo.com/web/image/2871-da916d98/Capture%20d’écran%202025-02-25%20à%2014.08.17.png?height=256",
+      "Hafsa": "https://joy-juice.odoo.com/web/image/2871-da916d98/Capture%20d’écran%202025-02-25%20à%2014.08.17.png?height=256",
+      "Alliance Al Ghazela": "https://joy-juice.odoo.com/web/image/2871-da916d98/Capture%20d’écran%202025-02-25%20à%2014.08.17.png?height=256",
+      "Boulangerie Aziz": "https://joy-juice.odoo.com/web/image/2871-da916d98/Capture%20d’écran%202025-02-25%20à%2014.08.17.png?height=256"
+    };
+
+    // Ajustement de la vue pour englober tous les marqueurs
+    const bounds = new google.maps.LatLngBounds();
+    let processedCount = 0;
+    const totalLocations = locations.length;
+    function onMarkerCreated(latLng) {
+      bounds.extend(latLng);
+      processedCount++;
+      if (processedCount === totalLocations) {
+        map.fitBounds(bounds);
+      }
+    }
+
+    // Parcours de chaque lieu
+    locations.forEach(loc => {
+      if (loc.placeId) {
+        // Pour un lieu défini par placeId, on utilise getDetails
+        const request = {
+          placeId: loc.placeId,
+          fields: ["name", "geometry"]
+        };
+        service.getDetails(request, (place, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && place) {
+            const markerPos = place.geometry.location;
+            const markerName = place.name || "Lieu inconnu";
+            // On recherche dans le mapping le logo correspondant
+            const iconUrl = titleToIcon[markerName] || titleToIcon["Downtown Bardo"];
+            const marker = new google.maps.Marker({
+              map: map,
+              position: markerPos,
+              title: markerName,
+              icon: {
+                url: iconUrl,
+                scaledSize: new google.maps.Size(50, 50) // ajustez la taille si besoin
+              }
+            });
+            const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=place_id:${loc.placeId}`;
+            const infowindow = new google.maps.InfoWindow({
+              content: `<strong>${markerName}</strong><br><a href="${directionsUrl}" target="_blank">Itinéraire</a>`
+            });
+            marker.addListener("click", () => {
+              infowindow.open(map, marker);
+            });
+            onMarkerCreated(markerPos);
+          } else {
+            console.warn("Impossible de récupérer le lieu pour placeId:", loc.placeId, status);
+            processedCount++;
+            if (processedCount === totalLocations) {
+              map.fitBounds(bounds);
+            }
+          }
+        });
+      } else if (loc.position) {
+        // Pour un lieu défini par coordonnées
+        const markerPos = new google.maps.LatLng(loc.position.lat, loc.position.lng);
+        const markerTitle = loc.title || "Lieu sans nom";
+        const iconUrl = titleToIcon[markerTitle] || "https://joy-juice.odoo.com/web/image/3170-c486870b/downtown_carre.jpg?height=256";
+        const marker = new google.maps.Marker({
+          map: map,
+          position: markerPos,
+          title: markerTitle,
+          icon: {
+            url: iconUrl,
+            scaledSize: new google.maps.Size(50, 50)
+          }
+        });
+        const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${loc.position.lat},${loc.position.lng}`;
+        const infowindow = new google.maps.InfoWindow({
+          content: `<strong>${markerTitle}</strong><br><a href="${directionsUrl}" target="_blank">Itinéraire</a>`
+        });
+        marker.addListener("click", () => {
+          infowindow.open(map, marker);
+        });
+        onMarkerCreated(markerPos);
+      } else {
+        processedCount++;
+        if (processedCount === totalLocations) {
+          map.fitBounds(bounds);
+        }
+      }
+    });
+  }
+</script>
+
+<script async="" defer="" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyANNHXtFcxEmVe2S8BNVQHTz_ocetQ0hV4&amp;callback=initMap&amp;libraries=places"></script>
