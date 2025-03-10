@@ -1,4 +1,5 @@
 const odooAuth = require('./odooAuth');
+const { formatPrice } = require('./claude/utils/numberUtils');
 
 class OdooSalesService {
   /**
@@ -275,15 +276,38 @@ class OdooSalesService {
       });
 
       const unpaidOrders = draftOrders + confirmedOrders;
-      const balance = unpaidInvoices + unpaidOrders;
-      console.log(`✅ Solde client final: ${balance} DNT (Factures impayées + Devis + Commandes en attente de facturation)`);
-      return balance;
-
-    } catch (error) {
-      console.error('❌ [ERROR] Récupération solde client a échoué:', error);
-      return 0;
+      const total = unpaidInvoices + unpaidOrders;
+      
+      const balanceDetails = {
+        unpaidInvoices: formatPrice(unpaidInvoices),
+        unpaidOrders: formatPrice(unpaidOrders),
+        total: formatPrice(total)
+      };
+      
+      console.log(`✅ Solde client détaillé: `, balanceDetails);
+      return balanceDetails;
+  
+    } catch (formattingError) {
+      console.error("❌ Erreur lors du formatage des prix:", formattingError);
+      // En cas d'erreur de formatage, retourner les valeurs brutes
+      return {
+        unpaidInvoices: unpaidInvoices || 0,
+        unpaidOrders: unpaidOrders || 0,
+        total: (unpaidInvoices || 0) + (unpaidOrders || 0)
+      };
     }
+
+  } catch (error) {
+    console.error('❌ [ERROR] Récupération solde client a échoué:', error);
+    console.error('Erreur :', error.message); // Ajoutons ceci pour voir l'erreur spécifique
+    // Assurons-nous de retourner une structure valide même en cas d'erreur
+    return { 
+      unpaidInvoices: 0, 
+      unpaidOrders: 0, 
+      total: 0 
+    };
   }
+
 
 
 /**

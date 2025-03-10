@@ -85,7 +85,8 @@ async function handleNewFormatLivraison(livraisonData) {
 
     // 5. Formatage final des montants
     const formattedTotal = formatPrice(odooResult.total);
-    const formattedBalance = formatPrice(balance);
+    const balanceDetails = await odooSalesService.getCustomerBalance(livraisonData.clientId);
+
 
     // 6. Retour du résultat global sans interaction avec Google Sheets
     const result = {
@@ -96,7 +97,7 @@ async function handleNewFormatLivraison(livraisonData) {
         Nom_Client: livraisonData.clientName,
         Zone: livraisonData.zone,
         ID_Client: livraisonData.clientId,
-        solde: formattedBalance // Solde formaté
+        solde: balanceDetails.total // Gardons le total pour compatibilité
       },
       livraison: {
         id: newLivraisonId,
@@ -104,7 +105,7 @@ async function handleNewFormatLivraison(livraisonData) {
         total: formattedTotal,
         details: details
       },
-      message: `${livraisonData.clientName}\n\n${details.map(d => `${d.Quantite} ${d.ID_Produit}`).join(', ')}\nTTC: ${formattedTotal}DNT (C-${odooResult.orderId})\n\nSOLDE: ${formattedBalance}DNT`
+      message: `${livraisonData.clientName}\n\n${details.map(d => `${d.Quantite} ${d.ID_Produit}`).join(', ')}\nTTC: ${formattedTotal}DNT (C-${odooResult.orderId})\n\nCommandes non facturées: ${balanceDetails.unpaidOrders}DNT\nFactures non payées: ${balanceDetails.unpaidInvoices}DNT\nTotal: ${balanceDetails.total}DNT`
     };
 
     console.log('[livraisonsFormat] Retour structuré:', result);

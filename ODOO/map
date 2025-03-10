@@ -204,5 +204,3 @@
     });
   }
 </script>
-
-<script async="" defer="" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyANNHXtFcxEmVe2S8BNVQHTz_ocetQ0hV4&amp;callback=initMap&amp;libraries=places"></script>
